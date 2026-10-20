@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "author": "Antigravity",
+  "editor": "wokwi",
+  "parts": [
+    { "type": "board-esp32-devkit-c-v4", "id": "esp", "top": 100, "left": 100, "attrs": {} },
+    { "type": "wokwi-dht22", "id": "dht", "top": -80, "left": 40, "attrs": { "temperature": "42", "humidity": "40" } },
+    { "type": "wokwi-photoresistor-sensor", "id": "ldr", "top": -80, "left": 180, "attrs": {} },
+    { "type": "wokwi-potentiometer", "id": "pot_soiling", "top": -80, "left": 320, "attrs": { "value": "400" } },
+    { "type": "wokwi-servo", "id": "servo_angle", "top": 200, "left": 360, "attrs": {} },
+    { "type": "wokwi-led", "id": "led_cool", "top": 40, "left": 360, "attrs": { "color": "blue", "label": "Cooling" } },
+    { "type": "wokwi-led", "id": "led_clean", "top": 100, "left": 360, "attrs": { "color": "yellow", "label": "Cleaning" } },
+    { "type": "wokwi-resistor", "id": "r_cool", "top": 40, "left": 420, "attrs": { "value": "220" } },
+    { "type": "wokwi-resistor", "id": "r_clean", "top": 100, "left": 420, "attrs": { "value": "220" } }
+  ],
+  "connections": [
+    [ "esp:TX", "$serialMonitor:RX", "", [] ],
+    [ "esp:RX", "$serialMonitor:TX", "", [] ],
+
+    [ "dht:VCC", "esp:3V3", "red", [ "v-10", "h100" ] ],
+    [ "dht:GND", "esp:GND.1", "black", [ "v-20", "h120" ] ],
+    [ "dht:SDA", "esp:4", "blue", [ "v-5", "h20" ] ],
+
+    [ "ldr:VCC", "esp:3V3", "red", [ "v-10", "h-40" ] ],
+    [ "ldr:GND", "esp:GND.1", "black", [ "v-20", "h-20" ] ],
+    [ "ldr:AO", "esp:34", "green", [ "v20", "h-60" ] ],
+
+    [ "pot_soiling:GND", "esp:GND.1", "black", [ "v-20", "h-160" ] ],
+    [ "pot_soiling:VCC", "esp:3V3", "red", [ "v-10", "h-180" ] ],
+    [ "pot_soiling:SIG", "esp:35", "purple", [ "v30", "h-190" ] ],
+
+    [ "servo_angle:GND", "esp:GND.2", "black", [ "v10", "h-140" ] ],
+    [ "servo_angle:V+", "esp:5V", "red", [ "v20", "h-160" ] ],
+    [ "servo_angle:PWM", "esp:18", "orange", [ "v-20", "h-140" ] ],
+
+    [ "esp:19", "r_cool:1", "cyan", [ "h20" ] ],
+    [ "r_cool:2", "led_cool:A", "cyan", [ "h0" ] ],
+    [ "led_cool:C", "esp:GND.2", "black", [ "v10", "h-160" ] ],
+
+    [ "esp:23", "r_clean:1", "yellow", [ "h20" ] ],
+    [ "r_clean:2", "led_clean:A", "yellow", [ "h0" ] ],
+    [ "led_clean:C", "esp:GND.2", "black", [ "v10", "h-160" ] ]
+  ],
+  "dependencies": {}
+}
