@@ -9,29 +9,73 @@ import {
 import { db, ref, set, onValue, isFirebaseReady } from './firebase';
 import { predictPowerML, ML_MODEL_METRICS } from './mlModel';
 
+const OPTIMAL_ANGLE = 20;
+
+// Helper to generate a realistic 24-hour diurnal solar generation timeline
+function generateInitial24HrData() {
+  const points = [];
+  const now = new Date();
+  // 48 points across 24 hours (1 every 30 mins)
+  for (let h = 24; h >= 0; h -= 0.5) {
+    const past = new Date(now.getTime() - h * 60 * 60 * 1000);
+    const hourOfDay = past.getHours() + past.getMinutes() / 60;
+    const timeStr = past.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+
+    // Realistic solar radiation curve: daylight between 6:00 AM and 6:30 PM
+    let sunSim = 0;
+    let tempSim = 22.0;
+    let act = 0;
+    let exp = 0;
+
+    if (hourOfDay >= 6.0 && hourOfDay <= 18.5) {
+      // Solar bell curve peaked around 12:30 PM
+      const sunAngle = Math.sin(((hourOfDay - 6.0) / 12.5) * Math.PI);
+      sunSim = Math.max(0, sunAngle * 960 + (Math.random() * 20 - 10));
+      tempSim = 25.0 + sunAngle * 18.0; // heats up to 43°C during peak noon
+      const soilSim = Math.min(48, 15 + (24 - h) * 1.3); // dust accumulated over the 24 hours
+
+      exp = predictPowerML(sunSim, 25.0, OPTIMAL_ANGLE, 0.0);
+      act = predictPowerML(sunSim, tempSim, 35, soilSim);
+    } else {
+      // Night time: 0 W
+      sunSim = 0;
+      tempSim = 20.0 + Math.random() * 2.0;
+      exp = 0;
+      act = 0;
+    }
+
+    points.push({
+      time: timeStr,
+      expected: exp,
+      actual: act,
+      hoursAgo: h
+    });
+  }
+  return points;
+}
+
 export default function App() {
   // --- Connection State (Strictly controlled by VS Code Wokwi telemetry) ---
   const [isDeviceConnected, setIsDeviceConnected] = useState(false);
   const [lastHeartbeatTime, setLastHeartbeatTime] = useState(0);
 
-  // --- Live Sensor States (Strictly driven by VS Code simulation; 0 when stopped) ---
-  const [irradiance, setIrradiance] = useState(0); // W/m²
-  const [temperature, setTemperature] = useState(0); // °C
-  const [soiling, setSoiling] = useState(0); // %
-  const [angle, setAngle] = useState(0); // degrees
-  const OPTIMAL_ANGLE = 20;
+  // --- Live Sensor States (Maintains previous values; updates whenever new telemetry arrives) ---
+  const [irradiance, setIrradiance] = useState(804); // W/m²
+  const [temperature, setTemperature] = useState(42.0); // °C
+  const [soiling, setSoiling] = useState(39); // %
+  const [angle, setAngle] = useState(35); // degrees
 
   // --- Power States ---
-  const [expectedPower, setExpectedPower] = useState(0);
-  const [actualPower, setActualPower] = useState(0);
-  const [powerHistory, setPowerHistory] = useState([]);
+  const [expectedPower, setExpectedPower] = useState(116.5);
+  const [actualPower, setActualPower] = useState(76.8);
+  const [powerHistory, setPowerHistory] = useState(() => generateInitial24HrData());
 
   // --- 24-Hour Rollback Window State ---
   // 0 = Live (Now), 4 = 4h ago, 12 = 12h ago, 24 = 24 hours ago
   const [rollbackHours, setRollbackHours] = useState(0);
 
-  // --- Energy Counters (0 when simulation is stopped) ---
-  const [todayEnergy, setTodayEnergy] = useState(0); // kWh
+  // --- Energy Counters ---
+  const [todayEnergy, setTodayEnergy] = useState(4.82); // kWh
   const [monthEnergy, setMonthEnergy] = useState(142.5); // kWh
   const [yearEnergy, setYearEnergy] = useState(1820.0); // kWh
 
@@ -41,51 +85,9 @@ export default function App() {
   const [pseudoResults, setPseudoResults] = useState(null);
   const [actionSuccessMessage, setActionSuccessMessage] = useState(null);
 
-  // Helper to generate a realistic 24-hour diurnal solar generation timeline
-  const generateInitial24HrData = () => {
-    const points = [];
-    const now = new Date();
-    // 48 points across 24 hours (1 every 30 mins)
-    for (let h = 24; h >= 0; h -= 0.5) {
-      const past = new Date(now.getTime() - h * 60 * 60 * 1000);
-      const hourOfDay = past.getHours() + past.getMinutes() / 60;
-      const timeStr = past.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-
-      // Realistic solar radiation curve: daylight between 6:00 AM and 6:30 PM
-      let sunSim = 0;
-      let tempSim = 22.0;
-      let act = 0;
-      let exp = 0;
-
-      if (hourOfDay >= 6.0 && hourOfDay <= 18.5) {
-        // Solar bell curve peaked around 12:30 PM
-        const sunAngle = Math.sin(((hourOfDay - 6.0) / 12.5) * Math.PI);
-        sunSim = Math.max(0, sunAngle * 960 + (Math.random() * 20 - 10));
-        tempSim = 25.0 + sunAngle * 18.0; // heats up to 43°C during peak noon
-        const soilSim = Math.min(48, 15 + (24 - h) * 1.3); // dust accumulated over the 24 hours
-
-        exp = predictPowerML(sunSim, 25.0, OPTIMAL_ANGLE, 0.0);
-        act = predictPowerML(sunSim, tempSim, 35, soilSim);
-      } else {
-        // Night time: 0 W
-        sunSim = 0;
-        tempSim = 20.0 + Math.random() * 2.0;
-        exp = 0;
-        act = 0;
-      }
-
-      points.push({
-        time: timeStr,
-        expected: exp,
-        actual: act,
-        hoursAgo: h
-      });
-    }
-    return points;
-  };
-
 
   // 1. Live Real-Time Telemetry Stream from local ESP32 Wokwi Bridge
+  // (Maintains previous values when signal pauses; updates whenever new telemetry arrives)
   useEffect(() => {
     let eventSource = null;
 
@@ -95,25 +97,16 @@ export default function App() {
       eventSource.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          if (data && data.connected && data.telemetry) {
+          if (data && data.telemetry) {
             setIsDeviceConnected(true);
             const t = data.telemetry;
-            if (t.irradiance !== undefined) setIrradiance(Number(t.irradiance));
-            if (t.temperature !== undefined) setTemperature(Number(t.temperature));
-            if (t.soiling !== undefined) setSoiling(Number(t.soiling));
-            if (t.angle !== undefined) setAngle(Number(t.angle));
-            if (t.actualPower !== undefined) setActualPower(Number(t.actualPower));
-            if (t.expectedPower !== undefined) setExpectedPower(Number(t.expectedPower));
+            if (t.irradiance !== undefined && t.irradiance !== null) setIrradiance(Number(t.irradiance));
+            if (t.temperature !== undefined && t.temperature !== null) setTemperature(Number(t.temperature));
+            if (t.soiling !== undefined && t.soiling !== null) setSoiling(Number(t.soiling));
+            if (t.angle !== undefined && t.angle !== null) setAngle(Number(t.angle));
+            if (t.actualPower !== undefined && t.actualPower !== null) setActualPower(Number(t.actualPower));
+            if (t.expectedPower !== undefined && t.expectedPower !== null) setExpectedPower(Number(t.expectedPower));
             setTodayEnergy(4.82);
-          } else {
-            setIsDeviceConnected(false);
-            setIrradiance(0);
-            setTemperature(0);
-            setSoiling(0);
-            setAngle(0);
-            setActualPower(0);
-            setExpectedPower(0);
-            setTodayEnergy(0);
           }
         } catch (e) {}
       };
@@ -125,37 +118,19 @@ export default function App() {
         const res = await fetch('/api/telemetry');
         if (res.ok) {
           const data = await res.json();
-          if (data && data.connected && data.telemetry) {
+          if (data && data.telemetry) {
             setIsDeviceConnected(true);
             const t = data.telemetry;
-            if (t.irradiance !== undefined) setIrradiance(Number(t.irradiance));
-            if (t.temperature !== undefined) setTemperature(Number(t.temperature));
-            if (t.soiling !== undefined) setSoiling(Number(t.soiling));
-            if (t.angle !== undefined) setAngle(Number(t.angle));
-            if (t.actualPower !== undefined) setActualPower(Number(t.actualPower));
-            if (t.expectedPower !== undefined) setExpectedPower(Number(t.expectedPower));
+            if (t.irradiance !== undefined && t.irradiance !== null) setIrradiance(Number(t.irradiance));
+            if (t.temperature !== undefined && t.temperature !== null) setTemperature(Number(t.temperature));
+            if (t.soiling !== undefined && t.soiling !== null) setSoiling(Number(t.soiling));
+            if (t.angle !== undefined && t.angle !== null) setAngle(Number(t.angle));
+            if (t.actualPower !== undefined && t.actualPower !== null) setActualPower(Number(t.actualPower));
+            if (t.expectedPower !== undefined && t.expectedPower !== null) setExpectedPower(Number(t.expectedPower));
             setTodayEnergy(4.82);
-          } else {
-            setIsDeviceConnected(false);
-            setIrradiance(0);
-            setTemperature(0);
-            setSoiling(0);
-            setAngle(0);
-            setActualPower(0);
-            setExpectedPower(0);
-            setTodayEnergy(0);
           }
         }
-      } catch (e) {
-        setIsDeviceConnected(false);
-        setIrradiance(0);
-        setTemperature(0);
-        setSoiling(0);
-        setAngle(0);
-        setActualPower(0);
-        setExpectedPower(0);
-        setTodayEnergy(0);
-      }
+      } catch (e) {}
     };
 
     const pollInterval = setInterval(pollLocalBridge, 1000);
@@ -168,14 +143,8 @@ export default function App() {
   }, []);
 
 
-  // 3. When connected, sync calculations and update graph
+  // 3. Update timeline graph as telemetry changes
   useEffect(() => {
-    if (!isDeviceConnected) {
-      setExpectedPower(0);
-      setActualPower(0);
-      return;
-    }
-
     // Populate initial 24-hour history if empty
     setPowerHistory((prev) => {
       if (prev.length === 0) {
@@ -184,10 +153,8 @@ export default function App() {
       return prev;
     });
 
-    const exp = predictPowerML(irradiance, 25.0, OPTIMAL_ANGLE, 0.0);
-    const act = predictPowerML(irradiance, temperature, angle, soiling);
-    setExpectedPower(exp);
-    setActualPower(act);
+    const exp = expectedPower || predictPowerML(irradiance, 25.0, OPTIMAL_ANGLE, 0.0);
+    const act = actualPower || predictPowerML(irradiance, temperature, angle, soiling);
 
     const now = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
     setPowerHistory((prev) => {
@@ -195,10 +162,10 @@ export default function App() {
       // Keep up to 60 historical points spanning 24 hours
       return updated.slice(-60);
     });
-  }, [isDeviceConnected, irradiance, temperature, soiling, angle]);
+  }, [irradiance, temperature, soiling, angle, expectedPower, actualPower]);
 
-  const powerLoss = isDeviceConnected ? Math.max(0, parseFloat((expectedPower - actualPower).toFixed(1))) : 0;
-  const isUnderperforming = isDeviceConnected && powerLoss > 15.0;
+  const powerLoss = Math.max(0, parseFloat((expectedPower - actualPower).toFixed(1)));
+  const isUnderperforming = powerLoss > 15.0;
 
   // Identify specific sensor values delivered from Wokwi simulation that define underperformance
   const underperformanceCulprits = useMemo(() => {
@@ -260,7 +227,6 @@ export default function App() {
 
   // ML Pseudo-Simulation
   const handleSolveThis = () => {
-    if (!isDeviceConnected) return;
     setIsSolving(true);
     setShowSolveModal(true);
 
@@ -401,59 +367,25 @@ export default function App() {
           </div>
         </div>
 
-        {/* Connection Status Badge (No manual start button - driven strictly by VS Code) */}
+        {/* Telemetry Status Badge */}
         <div className="flex items-center gap-3">
           <div className={`px-4 py-2 rounded-xl flex items-center gap-2 border shadow-sm ${
-            !isDeviceConnected
-              ? 'bg-rose-950/40 border-rose-500/40 text-rose-300'
-              : isUnderperforming 
-                ? 'bg-amber-500/10 border-amber-500/30 text-amber-400' 
-                : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+            isUnderperforming 
+              ? 'bg-amber-500/10 border-amber-500/30 text-amber-400' 
+              : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
           }`}>
-            {isDeviceConnected ? (
-              <Wifi className="w-4 h-4 text-emerald-400 animate-pulse" />
-            ) : (
-              <WifiOff className="w-4 h-4 text-rose-400" />
-            )}
+            <Wifi className="w-4 h-4 text-emerald-400 animate-pulse" />
             <span className="text-sm font-semibold">
-              {!isDeviceConnected 
-                ? 'Connection Break / Start Simulation in VS Code' 
-                : isUnderperforming 
-                  ? 'ESP32 Connected: Underperforming' 
-                  : 'ESP32 Connected: Optimal'}
+              {isUnderperforming 
+                ? 'Solar Telemetry: Underperforming Detected' 
+                : 'Solar Telemetry: Normal Operations'}
             </span>
           </div>
         </div>
       </header>
 
-      {/* CONNECTION BREAK / OFFLINE BANNER */}
-      {!isDeviceConnected && (
-        <div className="mb-8 p-6 rounded-3xl bg-gradient-to-r from-rose-950/70 via-slate-900 to-slate-900 border-2 border-rose-500/40 shadow-xl flex flex-col md:flex-row items-center justify-between gap-6">
-          <div className="flex items-center gap-4">
-            <div className="p-4 bg-rose-500/20 text-rose-400 rounded-2xl border border-rose-500/30 flex-shrink-0 animate-pulse">
-              <WifiOff className="w-8 h-8" />
-            </div>
-            <div>
-              <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                Connection Break / Start Simulation in VS Code
-                <span className="text-xs bg-rose-500/20 text-rose-300 px-2 py-0.5 rounded-full border border-rose-500/30">
-                  Awaiting ESP32
-                </span>
-              </h3>
-              <p className="text-sm text-slate-300 mt-1">
-                The dashboard only displays readings when the simulation is active. Open VS Code and click the green <span className="text-emerald-400 font-semibold">▶ Play</span> button in Wokwi Simulator to start streaming live solar telemetry.
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 text-xs text-slate-400 bg-slate-950/60 px-4 py-2.5 rounded-xl border border-slate-800 flex-shrink-0">
-            <Clock className="w-4 h-4 text-amber-400" />
-            <span>Listening on Wokwi Bridge</span>
-          </div>
-        </div>
-      )}
-
       {/* Action Completed Notification Banner */}
-      {isDeviceConnected && actionSuccessMessage && (
+      {actionSuccessMessage && (
         <div className="mb-6 p-4 rounded-2xl bg-emerald-950/40 border border-emerald-500/30 flex items-start justify-between gap-4">
           <div className="flex items-center gap-3">
             <CheckCircle2 className="w-6 h-6 text-emerald-400 flex-shrink-0" />
@@ -542,19 +474,19 @@ export default function App() {
         <div className="p-5 rounded-2xl bg-slate-900/60 border border-slate-800">
           <div className="flex items-center justify-between text-slate-400 mb-2">
             <span className="text-xs font-medium uppercase tracking-wider">Current Power</span>
-            <Zap className={`w-4 h-4 ${isDeviceConnected ? 'text-amber-400' : 'text-slate-600'}`} />
+            <Zap className="w-4 h-4 text-amber-400" />
           </div>
           <div className="flex items-baseline gap-2">
             <span className="text-3xl font-extrabold text-white">
-              {isDeviceConnected ? actualPower : 0}
+              {actualPower}
             </span>
             <span className="text-sm text-slate-400">W</span>
           </div>
           <div className="mt-2 text-xs flex items-center gap-1.5">
             <span className="text-slate-400">Expected:</span>
-            <span className="text-amber-400 font-semibold">{isDeviceConnected ? `${expectedPower} W` : '0 W'}</span>
-            <span className={`ml-auto font-medium ${isDeviceConnected && isUnderperforming ? 'text-rose-400' : isDeviceConnected ? 'text-emerald-400' : 'text-slate-500'}`}>
-              {isDeviceConnected && expectedPower > 0 ? `${((actualPower / expectedPower) * 100).toFixed(0)}% Eff.` : '0% Eff.'}
+            <span className="text-amber-400 font-semibold">{expectedPower} W</span>
+            <span className={`ml-auto font-medium ${isUnderperforming ? 'text-rose-400' : 'text-emerald-400'}`}>
+              {expectedPower > 0 ? `${((actualPower / expectedPower) * 100).toFixed(0)}% Eff.` : '0% Eff.'}
             </span>
           </div>
         </div>
@@ -562,48 +494,48 @@ export default function App() {
         <div className="p-5 rounded-2xl bg-slate-900/60 border border-slate-800">
           <div className="flex items-center justify-between text-slate-400 mb-2">
             <span className="text-xs font-medium uppercase tracking-wider">Today's Generation</span>
-            <Activity className={`w-4 h-4 ${isDeviceConnected ? 'text-emerald-400' : 'text-slate-600'}`} />
+            <Activity className="w-4 h-4 text-emerald-400" />
           </div>
           <div className="flex items-baseline gap-2">
             <span className="text-3xl font-extrabold text-white">
-              {isDeviceConnected ? todayEnergy : 0}
+              {todayEnergy}
             </span>
             <span className="text-sm text-slate-400">kWh</span>
           </div>
           <div className="mt-2 text-xs text-slate-400">
-            {isDeviceConnected ? '+4.2% vs yesterday' : 'Simulation Stopped (0.00 kWh)'}
+            +4.2% vs yesterday
           </div>
         </div>
 
         <div className="p-5 rounded-2xl bg-slate-900/60 border border-slate-800">
           <div className="flex items-center justify-between text-slate-400 mb-2">
             <span className="text-xs font-medium uppercase tracking-wider">Monthly Total</span>
-            <BarChart2 className={`w-4 h-4 ${isDeviceConnected ? 'text-blue-400' : 'text-slate-600'}`} />
+            <BarChart2 className="w-4 h-4 text-blue-400" />
           </div>
           <div className="flex items-baseline gap-2">
             <span className="text-3xl font-extrabold text-white">
-              {isDeviceConnected ? monthEnergy : 0}
+              {monthEnergy}
             </span>
             <span className="text-sm text-slate-400">kWh</span>
           </div>
           <div className="mt-2 text-xs text-slate-400">
-            {isDeviceConnected ? 'October 2026 Production' : 'Simulation Stopped (0 kWh)'}
+            October 2026 Production
           </div>
         </div>
 
         <div className="p-5 rounded-2xl bg-slate-900/60 border border-slate-800">
           <div className="flex items-center justify-between text-slate-400 mb-2">
             <span className="text-xs font-medium uppercase tracking-wider">Annual Generation</span>
-            <ShieldCheck className={`w-4 h-4 ${isDeviceConnected ? 'text-purple-400' : 'text-slate-600'}`} />
+            <ShieldCheck className="w-4 h-4 text-purple-400" />
           </div>
           <div className="flex items-baseline gap-2">
             <span className="text-3xl font-extrabold text-white">
-              {isDeviceConnected ? yearEnergy : 0}
+              {yearEnergy}
             </span>
             <span className="text-sm text-slate-400">kWh</span>
           </div>
           <div className="mt-2 text-xs text-slate-400">
-            {isDeviceConnected ? 'Total Solar Harvest (YTD)' : 'Simulation Stopped (0 kWh)'}
+            Total Solar Harvest (YTD)
           </div>
         </div>
       </div>
@@ -611,9 +543,7 @@ export default function App() {
       {/* Main Content: Telemetry & Live Power Chart with 1-Hour Rollback */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
         {/* Left Column: Read-Only Hardware Telemetry Delivered from VS Code Wokwi */}
-        <div className={`p-6 rounded-2xl bg-slate-900/60 border border-slate-800 flex flex-col justify-between relative ${
-          !isDeviceConnected ? 'opacity-60' : ''
-        }`}>
+        <div className="p-6 rounded-2xl bg-slate-900/60 border border-slate-800 flex flex-col justify-between relative">
           <div>
             <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-800/80">
               <div>
@@ -625,13 +555,9 @@ export default function App() {
                 </h3>
                 <p className="text-xs text-slate-400 mt-0.5">Live readings streaming from ESP32</p>
               </div>
-              <span className={`text-xs px-2.5 py-1 rounded-full font-medium border flex items-center gap-1.5 ${
-                isDeviceConnected 
-                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' 
-                  : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
-              }`}>
-                <span className={`w-2 h-2 rounded-full ${isDeviceConnected ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'}`} />
-                {isDeviceConnected ? 'Wokwi Active' : 'Simulation 0'}
+              <span className="text-xs px-2.5 py-1 rounded-full font-medium border flex items-center gap-1.5 bg-emerald-500/10 text-emerald-400 border-emerald-500/30">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                Live Feed
               </span>
             </div>
 
@@ -642,20 +568,20 @@ export default function App() {
                   <Sun className="w-4 h-4" /> Irradiance (LDR Sensor)
                 </span>
                 <span className="text-white font-bold text-sm">
-                  {isDeviceConnected ? `${irradiance} W/m²` : '0 W/m²'}
+                  {irradiance} W/m²
                 </span>
               </div>
               {/* Read-only progress bar */}
               <div className="w-full bg-slate-900 rounded-full h-2 overflow-hidden border border-slate-800">
                 <div 
                   className="bg-amber-400 h-2 rounded-full transition-all duration-500" 
-                  style={{ width: `${isDeviceConnected ? Math.min(100, (irradiance / 1000) * 100) : 0}%` }}
+                  style={{ width: `${Math.min(100, (irradiance / 1000) * 100)}%` }}
                 />
               </div>
               <div className="flex items-center justify-between text-[11px] text-slate-500 mt-1">
                 <span>0 W/m² (Night)</span>
-                <span className={isDeviceConnected && irradiance >= 700 ? 'text-amber-400 font-medium' : 'text-slate-400'}>
-                  {isDeviceConnected ? (irradiance >= 700 ? 'Strong Sunlight' : irradiance >= 400 ? 'Moderate Sun' : 'Low Light') : '0 (Stopped)'}
+                <span className={irradiance >= 700 ? 'text-amber-400 font-medium' : 'text-slate-400'}>
+                  {irradiance >= 700 ? 'Strong Sunlight' : irradiance >= 400 ? 'Moderate Sun' : 'Low Light'}
                 </span>
                 <span>1000 W/m²</span>
               </div>
@@ -668,20 +594,20 @@ export default function App() {
                   <Thermometer className="w-4 h-4" /> Cell Temp (DHT22 Sensor)
                 </span>
                 <span className="text-white font-bold text-sm">
-                  {isDeviceConnected ? `${temperature} °C` : '0 °C'}
+                  {temperature} °C
                 </span>
               </div>
               {/* Read-only progress bar */}
               <div className="w-full bg-slate-900 rounded-full h-2 overflow-hidden border border-slate-800">
                 <div 
                   className={`h-2 rounded-full transition-all duration-500 ${temperature > 35 ? 'bg-rose-500' : 'bg-emerald-500'}`} 
-                  style={{ width: `${isDeviceConnected ? Math.min(100, Math.max(0, ((temperature - 15) / 45) * 100)) : 0}%` }}
+                  style={{ width: `${Math.min(100, Math.max(0, ((temperature - 15) / 45) * 100))}%` }}
                 />
               </div>
               <div className="flex items-center justify-between text-[11px] text-slate-500 mt-1">
                 <span>15°C (Cool)</span>
-                <span className={isDeviceConnected && temperature > 35 ? 'text-rose-400 font-semibold' : 'text-slate-400'}>
-                  {isDeviceConnected ? (temperature > 40 ? '⚠️ High Thermal Loss' : temperature > 30 ? 'Warm Panel' : 'Nominal 25°C') : '0 (Stopped)'}
+                <span className={temperature > 35 ? 'text-rose-400 font-semibold' : 'text-slate-400'}>
+                  {temperature > 40 ? '⚠️ High Thermal Loss' : temperature > 30 ? 'Warm Panel' : 'Nominal 25°C'}
                 </span>
                 <span>60°C</span>
               </div>
@@ -694,20 +620,20 @@ export default function App() {
                   <Sparkles className="w-4 h-4" /> Soiling / Dust (Potentiometer)
                 </span>
                 <span className="text-white font-bold text-sm">
-                  {isDeviceConnected ? `${soiling} %` : '0 %'}
+                  {soiling} %
                 </span>
               </div>
               {/* Read-only progress bar */}
               <div className="w-full bg-slate-900 rounded-full h-2 overflow-hidden border border-slate-800">
                 <div 
                   className={`h-2 rounded-full transition-all duration-500 ${soiling > 25 ? 'bg-yellow-400' : 'bg-emerald-500'}`} 
-                  style={{ width: `${isDeviceConnected ? Math.min(100, Math.max(0, soiling)) : 0}%` }}
+                  style={{ width: `${Math.min(100, Math.max(0, soiling))}%` }}
                 />
               </div>
               <div className="flex items-center justify-between text-[11px] text-slate-500 mt-1">
                 <span>0% (Clean)</span>
-                <span className={isDeviceConnected && soiling > 25 ? 'text-yellow-400 font-semibold' : 'text-slate-400'}>
-                  {isDeviceConnected ? (soiling > 45 ? '⚠️ Heavy Dust Layer' : soiling > 25 ? 'Dust Accumulation' : 'Clean Surface') : '0 (Stopped)'}
+                <span className={soiling > 25 ? 'text-yellow-400 font-semibold' : 'text-slate-400'}>
+                  {soiling > 45 ? '⚠️ Heavy Dust Layer' : soiling > 25 ? 'Dust Accumulation' : 'Clean Surface'}
                 </span>
                 <span>100% (Dirty)</span>
               </div>
@@ -720,20 +646,20 @@ export default function App() {
                   <CompassIcon className="w-4 h-4" /> Panel Tilt Angle (Servo)
                 </span>
                 <span className="text-white font-bold text-sm">
-                  {isDeviceConnected ? `${angle}°` : '0°'}
+                  {angle}°
                 </span>
               </div>
               {/* Read-only progress bar */}
               <div className="w-full bg-slate-900 rounded-full h-2 overflow-hidden border border-slate-800">
                 <div 
                   className={`h-2 rounded-full transition-all duration-500 ${angle === OPTIMAL_ANGLE ? 'bg-emerald-400' : 'bg-blue-400'}`} 
-                  style={{ width: `${isDeviceConnected ? Math.min(100, Math.max(0, (angle / 60) * 100)) : 0}%` }}
+                  style={{ width: `${Math.min(100, Math.max(0, (angle / 60) * 100))}%` }}
                 />
               </div>
               <div className="flex items-center justify-between text-[11px] text-slate-500 mt-1">
                 <span>0°</span>
-                <span className={isDeviceConnected && angle === OPTIMAL_ANGLE ? 'text-emerald-400 font-semibold' : 'text-slate-400'}>
-                  {isDeviceConnected ? (angle === OPTIMAL_ANGLE ? 'Optimal (20°)' : `Misaligned (Opt: 20°)`) : '0 (Stopped)'}
+                <span className={angle === OPTIMAL_ANGLE ? 'text-emerald-400 font-semibold' : 'text-slate-400'}>
+                  {angle === OPTIMAL_ANGLE ? 'Optimal (20°)' : `Misaligned (Opt: 20°)`}
                 </span>
                 <span>60°</span>
               </div>
@@ -762,118 +688,106 @@ export default function App() {
                 )}
               </h3>
               <p className="text-xs text-slate-400">
-                {isDeviceConnected ? 'Scroll/scrub slider to roll back across the past 24 hours' : 'Awaiting simulation start in VS Code'}
+                Scroll/scrub slider to roll back across the past 24 hours
               </p>
             </div>
 
             {/* Quick 24-Hour Rollback Preset Buttons */}
-            {isDeviceConnected && (
-              <div className="flex items-center gap-1.5 text-xs bg-slate-950/80 p-1 rounded-xl border border-slate-800">
-                <button
-                  onClick={() => setRollbackHours(0)}
-                  className={`px-2 py-1 rounded-lg font-medium transition ${
-                    rollbackHours === 0 ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  Live
-                </button>
-                <button
-                  onClick={() => setRollbackHours(4)}
-                  className={`px-2 py-1 rounded-lg font-medium transition ${
-                    rollbackHours === 4 ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  -4h
-                </button>
-                <button
-                  onClick={() => setRollbackHours(8)}
-                  className={`px-2 py-1 rounded-lg font-medium transition ${
-                    rollbackHours === 8 ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  -8h
-                </button>
-                <button
-                  onClick={() => setRollbackHours(12)}
-                  className={`px-2 py-1 rounded-lg font-medium transition ${
-                    rollbackHours === 12 ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  -12h
-                </button>
-                <button
-                  onClick={() => setRollbackHours(18)}
-                  className={`px-2 py-1 rounded-lg font-medium transition ${
-                    rollbackHours === 18 ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  -18h
-                </button>
-                <button
-                  onClick={() => setRollbackHours(24)}
-                  className={`px-2 py-1 rounded-lg font-medium transition ${
-                    rollbackHours === 24 ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  -24h
-                </button>
-              </div>
-            )}
+            <div className="flex items-center gap-1.5 text-xs bg-slate-950/80 p-1 rounded-xl border border-slate-800">
+              <button
+                onClick={() => setRollbackHours(0)}
+                className={`px-2 py-1 rounded-lg font-medium transition ${
+                  rollbackHours === 0 ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                Live
+              </button>
+              <button
+                onClick={() => setRollbackHours(4)}
+                className={`px-2 py-1 rounded-lg font-medium transition ${
+                  rollbackHours === 4 ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                -4h
+              </button>
+              <button
+                onClick={() => setRollbackHours(8)}
+                className={`px-2 py-1 rounded-lg font-medium transition ${
+                  rollbackHours === 8 ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                -8h
+              </button>
+              <button
+                onClick={() => setRollbackHours(12)}
+                className={`px-2 py-1 rounded-lg font-medium transition ${
+                  rollbackHours === 12 ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                -12h
+              </button>
+              <button
+                onClick={() => setRollbackHours(18)}
+                className={`px-2 py-1 rounded-lg font-medium transition ${
+                  rollbackHours === 18 ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                -18h
+              </button>
+              <button
+                onClick={() => setRollbackHours(24)}
+                className={`px-2 py-1 rounded-lg font-medium transition ${
+                  rollbackHours === 24 ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                -24h
+              </button>
+            </div>
           </div>
 
           {/* 24-Hour Interactive Time Rollback Slider */}
-          {isDeviceConnected && (
-            <div className="mb-3 px-3 py-2 bg-slate-950/60 rounded-xl border border-slate-800/80 flex items-center gap-3">
-              <span className="text-[11px] text-slate-400 flex items-center gap-1 flex-shrink-0">
-                <History className="w-3.5 h-3.5 text-blue-400" />
-                Rollback (24h):
-              </span>
-              <input
-                type="range"
-                min="0"
-                max="24"
-                step="0.5"
-                value={rollbackHours}
-                onChange={(e) => setRollbackHours(Number(e.target.value))}
-                className="w-full accent-blue-500 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
-              />
-              <span className="text-xs font-mono text-blue-300 w-20 text-right flex-shrink-0">
-                {rollbackHours === 0 ? 'Live (Now)' : `-${rollbackHours} hrs`}
-              </span>
-            </div>
-          )}
+          <div className="mb-3 px-3 py-2 bg-slate-950/60 rounded-xl border border-slate-800/80 flex items-center gap-3">
+            <span className="text-[11px] text-slate-400 flex items-center gap-1 flex-shrink-0">
+              <History className="w-3.5 h-3.5 text-blue-400" />
+              Rollback (24h):
+            </span>
+            <input
+              type="range"
+              min="0"
+              max="24"
+              step="0.5"
+              value={rollbackHours}
+              onChange={(e) => setRollbackHours(Number(e.target.value))}
+              className="w-full accent-blue-500 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
+            />
+            <span className="text-xs font-mono text-blue-300 w-20 text-right flex-shrink-0">
+              {rollbackHours === 0 ? 'Live (Now)' : `-${rollbackHours} hrs`}
+            </span>
+          </div>
 
           {/* The Chart */}
           <div className="h-60 w-full relative">
-            {!isDeviceConnected ? (
-              <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/40 rounded-xl border border-dashed border-slate-800 text-center p-4">
-                <WifiOff className="w-8 h-8 text-rose-500/60 mb-2" />
-                <p className="text-sm font-semibold text-slate-300">Connection Break / Start Simulation</p>
-                <p className="text-xs text-slate-500 mt-0.5">Start the simulation in VS Code Wokwi to display 24-hour solar generation curves</p>
-              </div>
-            ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={displayedHistory}>
-                  <defs>
-                    <linearGradient id="colorExpected" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.4}/>
-                      <stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/>
-                    </linearGradient>
-                    <linearGradient id="colorActual" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#38bdf8" stopOpacity={0.5}/>
-                      <stop offset="95%" stopColor="#38bdf8" stopOpacity={0}/>
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                  <XAxis dataKey="time" stroke="#64748b" tick={{ fontSize: 11 }} />
-                  <YAxis stroke="#64748b" domain={[0, 160]} tick={{ fontSize: 11 }} unit="W" />
-                  <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '12px' }} />
-                  <Area type="monotone" dataKey="expected" stroke="#f59e0b" strokeWidth={2} fillOpacity={1} fill="url(#colorExpected)" name="Expected Power" />
-                  <Area type="monotone" dataKey="actual" stroke="#38bdf8" strokeWidth={2} fillOpacity={1} fill="url(#colorActual)" name="Actual Power" />
-                  <Brush dataKey="time" height={22} stroke="#38bdf8" fill="#020617" travellerWidth={8} />
-                </AreaChart>
-              </ResponsiveContainer>
-            )}
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={displayedHistory}>
+                <defs>
+                  <linearGradient id="colorExpected" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.4}/>
+                    <stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/>
+                  </linearGradient>
+                  <linearGradient id="colorActual" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#38bdf8" stopOpacity={0.5}/>
+                    <stop offset="95%" stopColor="#38bdf8" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                <XAxis dataKey="time" stroke="#64748b" tick={{ fontSize: 11 }} />
+                <YAxis stroke="#64748b" domain={[0, 160]} tick={{ fontSize: 11 }} unit="W" />
+                <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '12px' }} />
+                <Area type="monotone" dataKey="expected" stroke="#f59e0b" strokeWidth={2} fillOpacity={1} fill="url(#colorExpected)" name="Expected Power" />
+                <Area type="monotone" dataKey="actual" stroke="#38bdf8" strokeWidth={2} fillOpacity={1} fill="url(#colorActual)" name="Actual Power" />
+                <Brush dataKey="time" height={22} stroke="#38bdf8" fill="#020617" travellerWidth={8} />
+              </AreaChart>
+            </ResponsiveContainer>
           </div>
 
           <div className="mt-3 pt-3 border-t border-slate-800 text-xs text-slate-400 flex items-center justify-between">
@@ -907,7 +821,7 @@ export default function App() {
       </div>
 
       {/* WHAT-IF PSEUDO-SIMULATION MODAL */}
-      {showSolveModal && isDeviceConnected && (
+      {showSolveModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-700 rounded-3xl max-w-2xl w-full p-6 shadow-2xl overflow-hidden relative">
             <div className="flex items-center justify-between pb-4 border-b border-slate-800">
