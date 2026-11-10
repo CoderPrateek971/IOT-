@@ -61,12 +61,13 @@ To use the added tilt potentiometer, stop and restart the Wokwi simulation so it
 
 Each member owns an IoT component and the way its data or control appears in the dashboard. One member also owns Firebase as an additional responsibility. Since firmware and dashboard code are connected, members should coordinate changes to shared files while keeping the component ownership below clear.
 
-### Member 1 — Irradiance and temperature sensing
+### Member 1 — Environmental sensing and power monitoring
 
 - Own the photoresistor and DHT22 inputs in `diagram.json` and their reading/calibration logic in `src/main.cpp`.
-- Connect irradiance and temperature readings to the dashboard telemetry cards and power calculation.
-- Explain sensor units/ranges and how the dashboard keeps the last received values when telemetry pauses.
-- Demonstrate changing both Wokwi sensor values and confirming the dashboard updates.
+- Connect irradiance and temperature readings to the dashboard telemetry cards and explain how they affect the power calculation.
+- Own the dashboard's expected/actual power presentation, performance ratio, session energy estimate, and live power chart in `dashboard/src/App.jsx`.
+- Explain sensor units/ranges, the clean reference output, and how the dashboard retains the last reading when telemetry pauses.
+- Demonstrate changing both Wokwi sensor values and checking the displayed power and energy behavior.
 
 ### Member 2 — Soiling, fault mapping, and ML prediction
 
@@ -76,17 +77,18 @@ Each member owns an IoT component and the way its data or control appears in the
 - Explain dataset preparation, fault labels, model features/metrics, and the limitation that the dataset does not directly measure dust percentage.
 - Demonstrate how changing the soiling control changes the estimated output and fault status.
 
-### Member 3 — Tilt sensing and servo control
+### Member 3 — Tilt and corrective actuator control
 
-- Own the tilt potentiometer and servo hardware/control path in `diagram.json` and `src/main.cpp`.
+- Own the tilt potentiometer, servo, and cleaning/cooling actuator outputs in `diagram.json` and their firmware control paths in `src/main.cpp`.
 - Connect the reported angle to the dashboard tilt reading and manual angle control in `dashboard/src/App.jsx`.
-- Explain how the dashboard sends angle commands and confirms them through later telemetry, and how angle affects modeled power.
-- Demonstrate both physical knob control and dashboard angle control; document the modeled cosine response and its limitations.
+- Explain dashboard commands, telemetry confirmation, and the corrective-action workflow for angle, cleaning, and cooling.
+- Demonstrate physical and dashboard tilt changes plus cleaning/cooling indicators; document the modeled cosine response and simulator limitations.
 
-### Member 4 — Telemetry dashboard, integration, and Firebase
+### Member 4 — Telemetry bridge, dashboard status, and Firebase
 
-- Own the ESP32 serial telemetry transport and local Wokwi bridge in `dashboard/vite.config.js`, plus its live dashboard presentation in `dashboard/src/App.jsx`.
-- Explain telemetry JSON, real-time updates, stale-device error after three minutes, power-history chart, and action confirmation flow.
+- Own the ESP32 serial telemetry transport and local Wokwi bridge in `dashboard/vite.config.js`.
+- Own dashboard live/stale connection status and the reading retention/error behavior in `dashboard/src/App.jsx`.
+- Explain telemetry JSON, real-time updates, stale-device error after three minutes, and how the bridge handles dashboard commands.
 - As the additional responsibility, own Firebase connection and storage in `dashboard/src/firebase.js`, `dashboard/FIREBASE_SETUP.md`, and `dashboard/firebase-database.rules.json`.
 - Demonstrate that telemetry and completed action results are saved, and explain Firebase configuration and access rules.
 - Coordinate the shared end-to-end demo and report simulation/model estimates as estimates rather than measured field results.
