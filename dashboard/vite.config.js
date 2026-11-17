@@ -2,6 +2,8 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import net from 'net';
 
+// Member 4 owns the local Wokwi serial bridge, telemetry transport, stream endpoints, and commands.
+
 export default defineConfig({
   plugins: [
     react(),

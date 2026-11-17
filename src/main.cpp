@@ -9,7 +9,9 @@
 constexpr int PIN_DHT = 4;
 // Member 1: photoresistor pin and irradiance sensing setup.
 constexpr int PIN_LDR = 34;
+// Member 2: soiling potentiometer and simulated panel-condition input.
 constexpr int PIN_SOILING = 35;
+// Member 3: tilt input, servo, and corrective actuator outputs.
 constexpr int PIN_ANGLE_POT = 32;
 constexpr int PIN_SERVO = 18;
 constexpr int PIN_COOL = 19;
@@ -40,7 +42,7 @@ unsigned long lastSample = 0;
 
 // Dataset labels are fault classes, not measured dust percentages. The potentiometer
 // is explicitly a demo control mapped to those classes.
-// Member B starts here: convert the soiling control to the model's fault class.
+// Member 2 owns the soiling input and mapping from the potentiometer to dataset fault classes.
 float faultClassForSoiling(float percent)
 {
   if (percent < 12)
@@ -52,7 +54,7 @@ float faultClassForSoiling(float percent)
   return 2.3f;
 }
 
-// Member C starts here: tilt/servo control and operating-angle adjustment.
+// Member 3 owns tilt sensing, servo control, and the operating-angle adjustment.
 float angleFactor(int degrees)
 {
   const float difference = fabsf((float)degrees - OPTIMAL_ANGLE);
@@ -67,6 +69,7 @@ float temperatureFactor(float degreesC)
 
 void sampleSensors()
 {
+  // Member 1: convert the photoresistor ADC reading to simulated irradiance.
   const int lightRaw = analogRead(PIN_LDR);
   irradiance = map(4095 - lightRaw, 0, 4095, 0, 1000);
 
@@ -81,6 +84,7 @@ void sampleSensors()
     temperature = cooledByAction ? fminf(sensorTemp, 29.0f) : sensorTemp;
   }
 
+  // Member 2: read soiling control and map it to a software-defined panel condition.
   const int potRaw = analogRead(PIN_SOILING);
   const int potPercent = map(potRaw, 0, 4095, 0, 100);
   if (lastPotSoiling >= 0 && abs(potPercent - lastPotSoiling) >= 5)
@@ -90,6 +94,7 @@ void sampleSensors()
   lastPotSoiling = potPercent;
   soiling = cleanedByAction ? 0.0f : (float)potPercent;
 
+  // Member 3: read tilt control and update the servo unless dashboard control is active.
   const int anglePotRaw = analogRead(PIN_ANGLE_POT);
   if (anglePotAnchor < 0)
   {
@@ -114,12 +119,13 @@ void sampleSensors()
     panelServo.write(angle);
   }
 
+  // Member 2 supplies the generated ML estimate; Members 1, 3, and 4 supply operating inputs.
   const float fault = faultClassForSoiling(soiling);
   actualPower = predictPowerML(irradiance, 25.0f, fault) * temperatureFactor(temperature) * angleFactor(angle);
   expectedPower = predictPowerML(irradiance, 25.0f, 0.0f);
 }
 
-// Member D starts here: publish the shared telemetry contract to the bridge.
+// Member 4 owns the shared serial telemetry contract consumed by the Wokwi bridge.
 void publishTelemetry()
 {
   ++telemetrySequence;
@@ -127,6 +133,7 @@ void publishTelemetry()
                 irradiance, temperature, soiling, angle, actualPower, expectedPower, actionSequence, telemetrySequence, COMMAND_PROTOCOL_VERSION);
 }
 
+// Member 3 owns actuator commands and their firmware actions.
 void runAction(const String &command)
 {
   const float before = actualPower;
@@ -198,6 +205,7 @@ void setup()
 
 void loop()
 {
+  // Member 3 owns command handling; Member 4 owns the serial transport and telemetry bridge.
   if (Serial.available())
   {
     String command = Serial.readStringUntil('\n');
