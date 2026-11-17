@@ -1,37 +1,51 @@
 {
-  "dataset_source": "kaggle: pythonafroz/pv-plant-in-normal-and-shading-faults-conditions",
-  "model_type": "Polynomial Ridge Regression (Degree 2)",
+  "dataset_source": "kaggle:pythonafroz/pv-plant-in-normal-and-shading-faults-conditions",
+  "model_type": "Ridge regression (irradiance, PV temperature, fault class)",
   "features": [
-    "Irradiance",
-    "Temperature",
-    "Angle",
-    "Soiling"
+    "GTI/1000",
+    "(TPV-25)/25",
+    "Fault=0",
+    "Fault=1",
+    "Fault=2.1",
+    "Fault=2.2",
+    "Fault=2.3",
+    "Fault=3.1",
+    "Fault=3.2",
+    "Fault=4"
   ],
-  "intercept": -10.156959586391409,
-  "coefficients": [
+  "fault_classes": [
     0.0,
-    0.17891123212475588,
-    0.5287335795812816,
-    0.2932681731528158,
-    -0.24447862782568328,
-    -6.423537716139764e-05,
-    0.0011511432527703779,
-    6.367400585630658e-05,
-    -0.0005182401830912257,
-    -0.013629054118255853,
-    -0.0033846794722445193,
-    0.015450407522624509,
-    -0.004107345903565945,
-    0.003646654885764154,
-    -0.024844219775792913
+    1.0,
+    2.1,
+    2.2,
+    2.3,
+    3.1,
+    3.2,
+    4.0
   ],
-  "r2_score": 0.87369733878521,
-  "mae": 8.785548816912655,
-  "rmse": 16.489027693755183,
-  "feature_importances": {
-    "Irradiance": 0.9492454676424076,
-    "Temperature": 0.030835409684009718,
-    "Angle": 0.010574899848321537,
-    "Soiling": 0.009344222825261157
-  }
+  "panel_rating_w": 150.0,
+  "dataset_reference_power_w": 1504.0,
+  "sample_count": 40079,
+  "chronological_test_split": "2022-05-19 10:26:28",
+  "metrics_panel_equivalent_w": {
+    "r2": 0.8727907981200032,
+    "mae_w": 12.637935793639196,
+    "rmse_w": 16.42620051349428,
+    "test_rows": 8016
+  },
+  "intercept": -0.023824512979017498,
+  "coefficients": [
+    0.5849041246571351,
+    0.05004964212125769,
+    0.14192285617374553,
+    -0.3216860946224573,
+    0.08623906430922808,
+    -0.04882345634319285,
+    -0.0958295732268722,
+    0.07684126855906534,
+    0.13474267942713414,
+    0.026593253781367517
+  ],
+  "scope_note": "Dataset has no panel angle or measured soiling percentage. Fault class is categorical. Power is scaled to a 150 W demo module using normal-fault dataset readings.",
+  "sampling_note": "Reservoir sampled by fault label (maximum 12,000 readings per class); holdout metrics use this class-stratified sample rather than raw plant event prevalence."
 }

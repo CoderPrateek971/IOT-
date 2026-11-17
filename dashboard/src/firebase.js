@@ -1,30 +1,58 @@
-import { initializeApp } from "firebase/app";
-import { getDatabase, ref, set, onValue } from "firebase/database";
+import { getApp, getApps, initializeApp } from 'firebase/app';
+import { getAuth, onAuthStateChanged, signInAnonymously } from 'firebase/auth';
+import { getDatabase, limitToLast, onValue, push, query, ref, set } from 'firebase/database';
 
-// Replace with your Firebase Project Configuration
-// You can get this from Firebase Console -> Project Settings -> General -> Web App
-export const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "your-project.firebaseapp.com",
-  databaseURL: "https://your-project-default-rtdb.firebaseio.com",
-  projectId: "your-project",
-  storageBucket: "your-project.appspot.com",
-  messagingSenderId: "123456789",
-  appId: "1:123456789:web:abcdef"
+const env = import.meta.env;
+const firebaseConfig = {
+  apiKey: env.VITE_FIREBASE_API_KEY,
+  authDomain: env.VITE_FIREBASE_AUTH_DOMAIN,
+  databaseURL: env.VITE_FIREBASE_DATABASE_URL,
+  projectId: env.VITE_FIREBASE_PROJECT_ID,
+  appId: env.VITE_FIREBASE_APP_ID
 };
 
-let db = null;
-export let isFirebaseReady = false;
+export const isFirebaseConfigured = Object.values(firebaseConfig).every(Boolean);
+const app = isFirebaseConfigured ? (getApps().length ? getApp() : initializeApp(firebaseConfig)) : null;
+const auth = app ? getAuth(app) : null;
+const database = app ? getDatabase(app) : null;
 
-try {
-  if (firebaseConfig.apiKey !== "YOUR_API_KEY") {
-    const app = initializeApp(firebaseConfig);
-    db = getDatabase(app);
-    isFirebaseReady = true;
-    console.log("Firebase connected successfully");
-  }
-} catch (error) {
-  console.warn("Firebase not configured yet. Running in local simulation mode.", error);
+export async function ensureFirebaseUser() {
+  if (!auth) throw new Error('Firebase is not configured. Add the VITE_FIREBASE values to dashboard/.env.local.');
+  const currentUser = auth.currentUser || await new Promise((resolve, reject) => {
+    let unsubscribe = () => {};
+    unsubscribe = onAuthStateChanged(auth, (user) => {
+      unsubscribe();
+      resolve(user);
+    }, reject);
+  });
+  if (currentUser) return currentUser;
+  const credential = await signInAnonymously(auth);
+  return credential.user;
 }
 
-export { db, ref, set, onValue };
+export async function saveTelemetry(uid, telemetry) {
+  if (!database || !uid) return;
+  const capturedAt = Date.now();
+  const record = { ...telemetry, capturedAt };
+  const historyRef = push(ref(database, `users/${uid}/telemetry`));
+  await Promise.all([
+    set(ref(database, `users/${uid}/latestTelemetry`), record),
+    set(historyRef, record)
+  ]);
+}
+
+export async function saveActionResult(uid, action) {
+  if (!database || !uid) return;
+  const record = { ...action, createdAt: action.createdAt || Date.now() };
+  await set(push(ref(database, `users/${uid}/actions`)), record);
+}
+
+export function subscribeToActionHistory(uid, onHistory, onError) {
+  if (!database || !uid) return () => {};
+  const recentActions = query(ref(database, `users/${uid}/actions`), limitToLast(30));
+  return onValue(recentActions, (snapshot) => {
+    const values = Object.values(snapshot.val() || {});
+    values.sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
+    onHistory(values);
+  }, onError);
+}
