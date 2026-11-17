@@ -3,9 +3,11 @@
 #include <ESP32Servo.h>
 #include "ml_model.h"
 
-// Member A starts here: environmental sensor pins and sensor/power readings.
+// Member 4 owns DHT22 temperature sensing; Member 1 owns photoresistor irradiance sensing.
 // Wokwi sensors model irradiance, temperature, and a software-defined soiling level.
+// Member 4: DHT22 pin and sensor setup.
 constexpr int PIN_DHT = 4;
+// Member 1: photoresistor pin and irradiance sensing setup.
 constexpr int PIN_LDR = 34;
 constexpr int PIN_SOILING = 35;
 constexpr int PIN_ANGLE_POT = 32;
@@ -68,6 +70,7 @@ void sampleSensors()
   const int lightRaw = analogRead(PIN_LDR);
   irradiance = map(4095 - lightRaw, 0, 4095, 0, 1000);
 
+  // Member 4: read and validate DHT22 temperature telemetry.
   const float sensorTemp = dht.readTemperature();
   if (!isnan(sensorTemp))
   {
@@ -139,6 +142,7 @@ void runAction(const String &command)
     digitalWrite(PIN_COOL, HIGH);
     delay(1200);
     digitalWrite(PIN_COOL, LOW);
+    // Member 4: use the DHT22 reading as the cooling-action baseline.
     const float sensed = dht.readTemperature();
     if (!isnan(sensed))
       coolingBaseline = sensed;

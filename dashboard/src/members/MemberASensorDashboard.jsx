@@ -1,6 +1,6 @@
 import { Sun, Thermometer } from 'lucide-react';
 
-// Member A starts here: environmental sensor readings and their dashboard view.
+// Member 1 owns the irradiance display; Member 4 owns the DHT22 temperature display.
 export default function MemberASensorDashboard({ irradiance, temperature }) {
   return <section className="rounded-lg bg-slate-900 border border-slate-800 p-4">
     <h2 className="text-sm font-semibold text-white">Environmental Sensors</h2>

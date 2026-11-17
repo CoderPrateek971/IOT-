@@ -43,6 +43,7 @@ export default function App() {
   const lastFirebaseTelemetry = React.useRef(0);
 
   // --- Live Sensor States (Maintains previous values; updates when new telemetry arrives) ---
+  // Member 4 owns the DHT22 temperature telemetry field; Member 1 owns irradiance.
   const [irradiance, setIrradiance] = useState(0); // W/m²
   const [temperature, setTemperature] = useState(0); // °C
   const [soiling, setSoiling] = useState(0); // simulated %
@@ -176,6 +177,7 @@ export default function App() {
     if (signature === lastTelemetrySignature.current) return;
     lastTelemetrySignature.current = signature;
     if (t.irradiance != null) setIrradiance(Number(t.irradiance));
+    // Member 4: consume the DHT22 temperature value from the shared telemetry stream.
     if (t.temperature != null) setTemperature(Number(t.temperature));
     if (t.soiling != null) setSoiling(Number(t.soiling));
     if (t.angle != null) setAngle(Number(t.angle));

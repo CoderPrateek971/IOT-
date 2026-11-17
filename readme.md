@@ -61,10 +61,10 @@ To use the added tilt potentiometer, stop and restart the Wokwi simulation so it
 
 These are implementation assignments: each member should build and deliver their listed features. The firmware and dashboard have shared integration points, so agree on telemetry fields and command formats before editing those interfaces. The dashboard is composed from four member-owned feature modules under `dashboard/src/members/`; `dashboard/src/App.jsx` remains the shared coordinator. ML preparation and training/evaluation live in separate files under `ml/`. Keep one `diagram.json` for the single Wokwi circuit; JSON does not support comments, so component ownership is marked in firmware/dashboard source comments and documented here rather than adding invalid JSON comments.
 
-### Member 1 — Irradiance/temperature sensing and live power monitoring
+### Member 1 — Irradiance sensing and live power monitoring
 
-- Implement the photoresistor and DHT22 wiring/configuration in `diagram.json` and robust sensor reads, range handling, and telemetry fields in `src/main.cpp`.
-- Implement the corresponding irradiance/temperature dashboard readings in `dashboard/src/App.jsx`.
+- Implement the photoresistor wiring/configuration and robust irradiance sensor reads, range handling, and telemetry fields in `diagram.json` and `src/main.cpp`.
+- Implement the corresponding irradiance dashboard reading in `dashboard/src/App.jsx`.
 - Implement expected power, actual power, performance ratio, and session energy calculations/display in the dashboard, including sensible handling of invalid or missing readings.
 - Own the ML data preparation stage: inspect source CSV columns/units, validate timestamp matching and invalid-row handling, and prepare/document the chronological train/holdout input in `ml/prepare_and_validate.py`.
 - Own the dashboard power/sensor modules in `dashboard/src/members/MemberAPowerDashboard.jsx` and `MemberASensorDashboard.jsx`.
@@ -92,8 +92,10 @@ These are implementation assignments: each member should build and deliver their
 - Implement the shared Firebase foundation: configuration loading, anonymous authentication, per-user database paths, subscriptions/readback, connection/error status, and security rules in `dashboard/src/firebase.js`, `dashboard/src/App.jsx`, and `dashboard/firebase-database.rules.json`.
 - Maintain the Firebase project setup and local configuration instructions in `dashboard/FIREBASE_SETUP.md` and `dashboard/.env.example`; review the Firebase data schema and integration with the other three members.
 
-### Member 4 — Telemetry bridge, live history
+### Member 4 — DHT22 temperature sensing, telemetry bridge, live history
 
+- Implement DHT22 wiring/configuration and robust temperature reads, range handling, and temperature telemetry fields in `diagram.json` and `src/main.cpp`; coordinate the shared telemetry format with Members 1 and 2.
+- Implement the corresponding temperature dashboard reading in `dashboard/src/App.jsx`.
 - Implement and maintain Wokwi serial connection/reconnection, telemetry parsing, live event delivery, REST endpoints, and dashboard command forwarding in `dashboard/vite.config.js`.
 - Implement retained latest readings, the three-minute stale-data error, and session chart sampling/history behavior in the dashboard/bridge integration.
 - Own dashboard ML inference integration: consume the generated model in `dashboard/src/mlModel.js`, ensure dashboard predictions and corrective-action comparisons use the shared model consistently, and surface model status/metrics with appropriate caveats in `dashboard/src/App.jsx`.
@@ -125,8 +127,8 @@ The tables below turn the implementation assignments into a file-by-file study g
 
 | **Person / area** | **File(s) to study** | **Task and connection to the workflow** |
 |---|---|---|
-| Member 1 — Sensors and power monitoring | `src/main.cpp`, `diagram.json` | Implement photoresistor and DHT22 wiring, sensor reads, range handling, and telemetry fields. Coordinate firmware and circuit changes with Members 2 and 3. |
-| Member 1 | `dashboard/src/App.jsx`, `dashboard/src/members/MemberASensorDashboard.jsx`, `dashboard/src/members/MemberAPowerDashboard.jsx` | Display irradiance and temperature; calculate and display expected power, actual power, performance ratio, and session energy, including handling missing or invalid readings. |
+| Member 1 — Irradiance sensing and power monitoring | `src/main.cpp`, `diagram.json` | Implement photoresistor wiring, irradiance reads, range handling, and telemetry fields. Coordinate firmware and circuit changes with Members 2 and 3. |
+| Member 1 | `dashboard/src/App.jsx`, `dashboard/src/members/MemberASensorDashboard.jsx`, `dashboard/src/members/MemberAPowerDashboard.jsx` | Display irradiance; calculate and display expected power, actual power, performance ratio, and session energy, including handling missing or invalid readings. |
 | Member 1 | `ml/prepare_and_validate.py`, `ml/README.md` | Prepare and validate timestamp-matched training inputs; document source columns, units, invalid-row handling, and chronological holdout preparation. |
 | Member 1 | `dashboard/src/firebase.js` | Maintain telemetry record fields for irradiance, temperature, and power. Coordinate the record shape with Members 2 and 4. |
 | Member 2 — Model training and fault input | `ml/train_and_evaluate.py`, `ml/train_model.py`, `ml/train_kaggle_model.py`, `ml/README.md` | Study model features, Ridge training, class sampling, chronological holdout evaluation, metric reporting, and the training entry points. |
@@ -138,6 +140,7 @@ The tables below turn the implementation assignments into a file-by-file study g
 | Member 3 | `include/ml_model.h`, `src/main.cpp` | Deploy the generated model coefficients to ESP32 inference, apply operating-condition adjustments, and compare firmware predictions with dashboard results. |
 | Member 3 | `dashboard/src/firebase.js`, `dashboard/firebase-database.rules.json`, `dashboard/FIREBASE_SETUP.md`, `dashboard/.env.example` | Implement Firebase configuration, anonymous authentication, per-user paths, subscriptions/readback, security rules, and persistence of corrective-action requests and verified outcomes. Coordinate schema changes with the other members. |
 | Member 4 — Telemetry bridge and history | `dashboard/vite.config.js` | Maintain Wokwi serial connection/reconnection, telemetry parsing, live events, REST endpoints, and dashboard command forwarding. |
+| Member 4 — Temperature sensing | `src/main.cpp`, `diagram.json`, `dashboard/src/App.jsx` | Implement DHT22 wiring, robust temperature reads, range handling, temperature telemetry, and the corresponding dashboard reading. Coordinate shared firmware and circuit changes with Members 1–3. |
 | Member 4 | `dashboard/src/App.jsx`, `dashboard/src/members/MemberDHistoryDashboard.jsx` | Implement retained latest readings, stale-data status, and session chart sampling/history behavior. |
 | Member 4 | `dashboard/src/mlModel.js`, `dashboard/src/App.jsx` | Integrate dashboard model inference and ensure predictions and corrective-action comparisons use the shared model consistently; surface model status and metrics. |
 | Member 4 | `dashboard/src/firebase.js`, `dashboard/FIREBASE_SETUP.md` | Coordinate Firebase configuration, readback/subscriptions, connection and error states, and local setup with Member 3. |
@@ -147,10 +150,10 @@ The tables below turn the implementation assignments into a file-by-file study g
 | **File(s)** | **Why everyone should study them** |
 |---|---|
 | `dashboard/src/App.jsx` | Shared dashboard coordinator for readings, controls, status, chart, model integration, and Firebase call sites. All four members have assigned work here. |
-| `src/main.cpp` | Shared firmware for environmental sensors, soiling and tilt inputs, model inference, telemetry, and actuators. Members 1–3 have assigned work here. |
-| `diagram.json` | Single Wokwi circuit definition; Members 1 and 3 both change component wiring. |
+| `src/main.cpp` | Shared firmware for irradiance and temperature sensors, soiling and tilt inputs, model inference, telemetry, and actuators. Members 1–4 have assigned work here. |
+| `diagram.json` | Single Wokwi circuit definition; Members 1, 3, and 4 change component wiring. |
 | `dashboard/src/firebase.js` | Shared Firebase client and persistence interface for sensor telemetry, prediction fields, action results, and readback. Members 1–4 coordinate through this file. |
 | `PROJECT_STATUS.md` | Project behavior, run instructions, member assignments, and integration handoff. |
 | `ml/README.md` | Shared assumptions and instructions for data preparation and model training/export. |
 
-Agree on telemetry fields and command formats before changing shared interfaces. The ML workflow is shared by stage: Member 1 prepares and validates inputs, Member 2 trains and evaluates, Member 3 deploys firmware inference, and Member 4 integrates dashboard inference. Firebase ownership is shared across telemetry, prediction fields, action records, and configuration/readback.
+Agree on telemetry fields and command formats before changing shared interfaces. Member 1 owns irradiance sensing and power monitoring; Member 4 owns DHT22 temperature sensing. The ML workflow is shared by stage: Member 1 prepares and validates inputs, Member 2 trains and evaluates, Member 3 deploys firmware inference, and Member 4 integrates dashboard inference. Firebase ownership is shared across telemetry, prediction fields, action records, and configuration/readback.
