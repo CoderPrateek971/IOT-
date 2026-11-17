@@ -81,7 +81,8 @@ void sampleSensors()
     {
       cooledByAction = false;
     }
-    temperature = cooledByAction ? fminf(sensorTemp, 29.0f) : sensorTemp;
+    // Keep telemetry truthful to the DHT22; simulated cooling only affects the power model below.
+    temperature = sensorTemp;
   }
 
   // Member 2: read soiling control and map it to a software-defined panel condition.
@@ -121,7 +122,8 @@ void sampleSensors()
 
   // Member 2 supplies the generated ML estimate; Members 1, 3, and 4 supply operating inputs.
   const float fault = faultClassForSoiling(soiling);
-  actualPower = predictPowerML(irradiance, 25.0f, fault) * temperatureFactor(temperature) * angleFactor(angle);
+  const float modeledTemperature = cooledByAction ? fminf(temperature, 29.0f) : temperature;
+  actualPower = predictPowerML(irradiance, 25.0f, fault) * temperatureFactor(modeledTemperature) * angleFactor(angle);
   expectedPower = predictPowerML(irradiance, 25.0f, 0.0f);
 }
 
