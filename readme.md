@@ -27,19 +27,49 @@ The implementation is a simulation and educational prototype. The Kaggle dataset
 
 To use the added tilt potentiometer, stop and restart the Wokwi simulation so it reloads `diagram.json` and the latest firmware. It is positioned next to the soiling potentiometer. Turning the tilt knob takes control back from a dashboard angle override.
 
-## Start the project
+## First-time setup and start
 
-1. Open the project in VS Code with PlatformIO and start the Wokwi simulation. If the circuit or firmware was changed, stop and start the simulation to load it again.
-2. In a terminal, run the dashboard:
+### Prerequisites
+
+- Install VS Code.
+- Install the recommended project extensions: **PlatformIO IDE** (`platformio.platformio-ide`) and **Wokwi Simulator** (`wokwi.wokwi-vscode`). VS Code may show these recommendations when you open the project.
+- Install Node.js and npm for the React dashboard.
+- Open the project root folder, the folder containing `platformio.ini`, `diagram.json`, and `wokwi.toml`.
+
+### Build and start the ESP32 simulation
+
+1. Open the project root in VS Code and let PlatformIO initialize the ESP32 environment. On the first build, PlatformIO downloads the ESP32 platform and the libraries listed in `platformio.ini`.
+2. Build the firmware from the project root:
 
    ```sh
-   cd dashboard
-   npm install
-   npm run dev
+   pio run -e esp32dev
    ```
 
-3. Open the local Vite address (normally `http://localhost:3000`). The dashboard bridge connects to Wokwi on local TCP port 4000.
-4. To enable Firebase, follow `dashboard/FIREBASE_SETUP.md`, create `dashboard/.env.local` from `.env.example`, and restart Vite.
+   If `pio` is not available in your terminal, use **PlatformIO: Build** from the VS Code PlatformIO toolbar or Command Palette. The Wokwi configuration uses the generated `.pio/build/esp32dev/firmware.bin` and `.elf` files.
+3. Open the Wokwi Simulator panel and start the simulation. If you change `diagram.json` or firmware, build again and restart the simulation so it loads the updated files.
+
+### Install and start the dashboard
+
+Open a second terminal at the project root and run:
+
+```sh
+cd dashboard
+npm ci
+npm run dev
+```
+
+`npm ci` installs the exact dependencies recorded in `dashboard/package-lock.json`; repeat it only when dependencies change or when setting up a fresh copy. Vite starts at `http://localhost:3000`. Keep the simulator and dashboard running together. The dashboard bridge connects to the Wokwi serial endpoint on local TCP port 4000. The header should change from “Waiting for first reading” to “Telemetry live” after fresh simulator telemetry arrives.
+
+### Optional Firebase setup
+
+Firebase is not required for local monitoring. To enable cloud storage, follow `dashboard/FIREBASE_SETUP.md`, copy `dashboard/.env.example` to `dashboard/.env.local`, replace the sample values with your Firebase project settings, and restart the dashboard server. Do not commit `.env.local` or real credentials.
+
+### If the dashboard shows no live readings
+
+- Confirm the Wokwi simulation is running the latest firmware and has completed a fresh build.
+- Check the dashboard terminal for `[Wokwi Bridge] Connected to Wokwi Simulator UART on port 4000`.
+- Keep Wokwi and the dashboard on the same computer because the bridge connects to `127.0.0.1:4000`.
+- Firebase connection status is separate from Wokwi telemetry status; follow the Firebase setup guide if only Firebase reports an error.
 
 ## Current behavior and limits
 
