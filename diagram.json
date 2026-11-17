@@ -7,6 +7,7 @@
     { "type": "wokwi-dht22", "id": "dht", "top": -80, "left": 40, "attrs": { "temperature": "42", "humidity": "40" } },
     { "type": "wokwi-photoresistor-sensor", "id": "ldr", "top": -80, "left": 180, "attrs": {} },
     { "type": "wokwi-potentiometer", "id": "pot_soiling", "top": -80, "left": 320, "attrs": { "value": "400" } },
+    { "type": "wokwi-potentiometer", "id": "pot_angle", "top": -80, "left": 470, "attrs": { "value": "114" } },
     { "type": "wokwi-servo", "id": "servo_angle", "top": 200, "left": 360, "attrs": {} },
     { "type": "wokwi-led", "id": "led_cool", "top": 40, "left": 360, "attrs": { "color": "blue", "label": "Cooling" } },
     { "type": "wokwi-led", "id": "led_clean", "top": 100, "left": 360, "attrs": { "color": "yellow", "label": "Cleaning" } },
@@ -28,6 +29,10 @@
     [ "pot_soiling:GND", "esp:GND.1", "black", [ "v-20", "h-160" ] ],
     [ "pot_soiling:VCC", "esp:3V3", "red", [ "v-10", "h-180" ] ],
     [ "pot_soiling:SIG", "esp:35", "purple", [ "v30", "h-190" ] ],
+
+    [ "pot_angle:GND", "esp:GND.1", "black", [ "v-20", "h-160" ] ],
+    [ "pot_angle:VCC", "esp:3V3", "red", [ "v-10", "h-180" ] ],
+    [ "pot_angle:SIG", "esp:32", "green", [ "v30", "h-190" ] ],
 
     [ "servo_angle:GND", "esp:GND.2", "black", [ "v10", "h-140" ] ],
     [ "servo_angle:V+", "esp:5V", "red", [ "v20", "h-160" ] ],

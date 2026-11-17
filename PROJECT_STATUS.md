@@ -57,54 +57,64 @@ To use the added tilt potentiometer, stop and restart the Wokwi simulation so it
 4. Add device identity/authentication and a trusted server-side data path before deploying beyond a local demo.
 5. Test hardware behavior, command timeouts, reconnect behavior, and sensor failure handling on the target ESP32 and actuators.
 
-## Suggested work division for four members
+## Four-member implementation work division
 
-Each member owns an IoT component and the way its data or control appears in the dashboard. One member also owns Firebase as an additional responsibility. Since firmware and dashboard code are connected, members should coordinate changes to shared files while keeping the component ownership below clear.
+These are implementation assignments: each member should build and deliver their listed features. The firmware and dashboard have shared integration points, so agree on telemetry fields and command formats before editing those interfaces. The dashboard is composed from four member-owned feature modules under `dashboard/src/members/`; `dashboard/src/App.jsx` remains the shared coordinator. ML preparation and training/evaluation live in separate files under `ml/`. Keep one `diagram.json` for the single Wokwi circuit; JSON does not support comments, so component ownership is marked in firmware/dashboard source comments and documented here rather than adding invalid JSON comments.
 
-### Member 1 — Environmental sensing and power monitoring
+### Member 1 — Irradiance/temperature sensing and live power monitoring
 
-- Own the photoresistor and DHT22 inputs in `diagram.json` and their reading/calibration logic in `src/main.cpp`.
-- Connect irradiance and temperature readings to the dashboard telemetry cards and explain how they affect the power calculation.
-- Own the dashboard's expected/actual power presentation, performance ratio, session energy estimate, and live power chart in `dashboard/src/App.jsx`.
-- Explain sensor units/ranges, the clean reference output, and how the dashboard retains the last reading when telemetry pauses.
-- Demonstrate changing both Wokwi sensor values and checking the displayed power and energy behavior.
+- Implement the photoresistor and DHT22 wiring/configuration in `diagram.json` and robust sensor reads, range handling, and telemetry fields in `src/main.cpp`.
+- Implement the corresponding irradiance/temperature dashboard readings in `dashboard/src/App.jsx`.
+- Implement expected power, actual power, performance ratio, and session energy calculations/display in the dashboard, including sensible handling of invalid or missing readings.
+- Own the ML data preparation stage: inspect source CSV columns/units, validate timestamp matching and invalid-row handling, and prepare/document the chronological train/holdout input in `ml/prepare_and_validate.py`.
+- Own the dashboard power/sensor modules in `dashboard/src/members/MemberAPowerDashboard.jsx` and `MemberASensorDashboard.jsx`.
+- Implement and maintain the Firebase telemetry record fields for irradiance, temperature, and power readings through `saveTelemetry` in `dashboard/src/firebase.js`; coordinate the shared record shape with Members 2 and 4.
+- Deliver reproducible prepared model inputs and a working Wokwi-to-dashboard path where changing either environmental input updates displayed readings and power values.
 
-### Member 2 — Soiling, fault mapping, and ML prediction
+### Member 2 — Dataset pipeline, model training, and soiling/fault input
 
-- Own the soiling potentiometer and its effect on simulated panel condition in `diagram.json` and `src/main.cpp`.
-- Connect the soiling reading and mapped fault class to dashboard status, estimated power, and cleaning recommendation.
-- Own the Kaggle training workflow and model files: `ml/`, `include/ml_model.h`, and `dashboard/src/mlModel.js`.
-- Explain dataset preparation, fault labels, model features/metrics, and the limitation that the dataset does not directly measure dust percentage.
-- Demonstrate how changing the soiling control changes the estimated output and fault status.
+- Own the model training stage: choose and implement the Ridge model/features, training process, class sampling, chronological holdout evaluation, and metric reporting in `ml/train_and_evaluate.py` (using Member 1's reviewed data-preparation work).
+- Generate and document model coefficients and evaluation metadata in `ml/trained_model.json`; coordinate artifact export requirements with Members 3 and 4.
+- Implement the soiling potentiometer reading and fault-class mapping in `src/main.cpp`, then connect its value to dashboard telemetry and degradation display in `dashboard/src/App.jsx`.
+- Add predicted power, fault class, and soiling-derived context to the Firebase prediction record schema; coordinate the write implementation with Member 4 and keep raw telemetry identifiable.
+- Own the dashboard fault/diagnostics module in `dashboard/src/members/MemberBDiagnosticsDashboard.jsx`.
+- Deliver repeatable model generation and a working soiling-input-to-fault/power path. Keep the dataset limitation (no direct dust measurement) explicit in code/docs.
 
-### Member 3 — Tilt and corrective actuator control
+### Member 3 — Tilt input, servo, and corrective-action controls
 
-- Own the tilt potentiometer, servo, and cleaning/cooling actuator outputs in `diagram.json` and their firmware control paths in `src/main.cpp`.
-- Connect the reported angle to the dashboard tilt reading and manual angle control in `dashboard/src/App.jsx`.
-- Explain dashboard commands, telemetry confirmation, and the corrective-action workflow for angle, cleaning, and cooling.
-- Demonstrate physical and dashboard tilt changes plus cleaning/cooling indicators; document the modeled cosine response and simulator limitations.
+- Implement tilt-potentiometer wiring/reading and servo movement in `diagram.json` and `src/main.cpp`.
+- Implement dashboard angle input, command submission, and angle confirmation from fresh telemetry in `dashboard/src/App.jsx` and the bridge interface.
+- Implement cleaning/cooling actuator outputs and action command handling in firmware, with dashboard action selection and post-action verification.
+- Own edge deployment of the trained model: consume generated coefficients in `include/ml_model.h`, implement/maintain ESP32 inference and operating-condition adjustments in `src/main.cpp`, and compare predictions with the dashboard version on shared sample inputs.
+- Implement persistence of corrective-action requests and verified outcomes using the Firebase action history path (`saveActionResult` and its call sites in `dashboard/src/App.jsx`), including timestamps, action name, predicted gain, measured/simulated gain, and verification error.
+- Own dashboard tilt control and corrective-action UI in `dashboard/src/members/MemberCTiltDashboard.jsx` and `MemberCCorrectiveActions.jsx`.
+- Deliver matching firmware inference on reference cases, working knob/dashboard angle control, and cleaning/cooling simulations, with validated limits and clear failure states.
 
-### Member 4 — Telemetry bridge, dashboard status, and Firebase
+### Member 4 — Telemetry bridge, live history, and Firebase persistence
 
-- Own the ESP32 serial telemetry transport and local Wokwi bridge in `dashboard/vite.config.js`.
-- Own dashboard live/stale connection status and the reading retention/error behavior in `dashboard/src/App.jsx`.
-- Explain telemetry JSON, real-time updates, stale-device error after three minutes, and how the bridge handles dashboard commands.
-- As the additional responsibility, own Firebase connection and storage in `dashboard/src/firebase.js`, `dashboard/FIREBASE_SETUP.md`, and `dashboard/firebase-database.rules.json`.
-- Demonstrate that telemetry and completed action results are saved, and explain Firebase configuration and access rules.
-- Coordinate the shared end-to-end demo and report simulation/model estimates as estimates rather than measured field results.
+- Implement and maintain Wokwi serial connection/reconnection, telemetry parsing, live event delivery, REST endpoints, and dashboard command forwarding in `dashboard/vite.config.js`.
+- Implement retained latest readings, the three-minute stale-data error, and session chart sampling/history behavior in the dashboard/bridge integration.
+- Own dashboard ML inference integration: consume the generated model in `dashboard/src/mlModel.js`, ensure dashboard predictions and corrective-action comparisons use the shared model consistently, and surface model status/metrics with appropriate caveats in `dashboard/src/App.jsx`.
+- Implement the shared Firebase foundation: configuration loading, anonymous authentication, per-user database paths, subscriptions/readback, connection/error status, and security rules in `dashboard/src/firebase.js`, `dashboard/src/App.jsx`, and `dashboard/firebase-database.rules.json`.
+- Maintain the Firebase project setup and local configuration instructions in `dashboard/FIREBASE_SETUP.md` and `dashboard/.env.example`; review the Firebase data schema and integration with the other three members.
+- Own the dashboard live-history module in `dashboard/src/members/MemberDHistoryDashboard.jsx`.
+- Deliver a working bridge-to-dashboard stream and shared Firebase setup, including visible connection/error states and documented local configuration.
 
-### Shared handoff
+### Integration handoff
 
-Before the demo, all four members should run one shared scenario: start Wokwi and the dashboard, vary the sensor and control assigned to each member, confirm the corresponding dashboard updates, apply a corrective action, and check the telemetry, chart, and Firebase record. Record each person's actual contribution and observed result.
+Each member implements their assigned component through to its dashboard and Firebase data result. The ML workflow is shared by stage: Member 1 prepares/validates training inputs, Member 2 trains and evaluates the model, Member 3 deploys inference to ESP32, and Member 4 integrates inference into the dashboard. Firebase work is shared by ownership: Member 1 handles sensor/power telemetry records, Member 2 defines prediction/fault fields, Member 3 handles corrective-action records, and Member 4 handles configuration, authentication, subscriptions, and security rules. Integrate using agreed data schemas and command formats, then run a joint end-to-end check covering changed inputs, matching predictions/status, an action, fresh telemetry, chart updates, and persisted records.
 
 ## Key files
 
 - `src/main.cpp` — ESP32 telemetry and actuator firmware
 - `diagram.json` — Wokwi circuit and component wiring
 - `dashboard/src/App.jsx` — dashboard UI, stream handling, controls, status, and chart
+- `dashboard/src/members/` — four member-owned dashboard feature modules imported by `App.jsx`
 - `dashboard/vite.config.js` — local Wokwi serial bridge and API endpoints
 - `dashboard/src/firebase.js` — Firebase client and persistence functions
 - `dashboard/src/mlModel.js` — dashboard model and power estimates
-- `ml/train_kaggle_model.py` — Kaggle-data training/export script
+- `ml/prepare_and_validate.py` — ML input preparation and validation
+- `ml/train_and_evaluate.py` — ML training, evaluation, and model exports
+- `ml/train_kaggle_model.py` — backward-compatible training command wrapper
 - `ml/README.md` — model training assumptions and instructions
 - `dashboard/FIREBASE_SETUP.md` — Firebase setup steps
