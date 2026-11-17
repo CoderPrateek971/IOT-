@@ -36,18 +36,6 @@ To use the added tilt potentiometer, stop and restart the Wokwi simulation so it
 - Install Node.js and npm for the React dashboard.
 - Open the project root folder, the folder containing `platformio.ini`, `diagram.json`, and `wokwi.toml`.
 
-### Build and start the ESP32 simulation
-
-1. Open the project root in VS Code and let PlatformIO initialize the ESP32 environment. On the first build, PlatformIO downloads the ESP32 platform and the libraries listed in `platformio.ini`.
-2. Build the firmware from the project root:
-
-   ```sh
-   pio run -e esp32dev
-   ```
-
-   If `pio` is not available in your terminal, use **PlatformIO: Build** from the VS Code PlatformIO toolbar or Command Palette. The Wokwi configuration uses the generated `.pio/build/esp32dev/firmware.bin` and `.elf` files.
-3. Open the Wokwi Simulator panel and start the simulation. If you change `diagram.json` or firmware, build again and restart the simulation so it loads the updated files.
-
 ### Install and start the dashboard
 
 Open a second terminal at the project root and run:
