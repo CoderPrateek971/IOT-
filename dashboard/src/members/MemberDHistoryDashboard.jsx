@@ -2,7 +2,7 @@ import { Area, AreaChart, Brush, CartesianGrid, ResponsiveContainer, Tooltip, XA
 
 // Member D starts here: live telemetry history visualization.
 export default function MemberDHistoryDashboard({ history, chartStart, chartDomainEnd, chartTicks }) {
-  return <section className="rounded-lg bg-slate-900 border border-slate-800 p-4 flex flex-col justify-between">
+  return <section className="h-full rounded-lg bg-slate-900 border border-slate-800 p-4 flex flex-col justify-between">
     <div><div className="flex flex-wrap items-center justify-between pb-3 border-b border-slate-800 gap-2 mb-3"><div><h2 className="text-sm font-semibold text-white">Live Power History</h2><p className="text-xs text-slate-400">Session start is fixed; chart samples and time ticks are spaced 30 seconds apart</p></div></div>
       <div className="h-60 w-full"><ResponsiveContainer width="100%" height="100%"><AreaChart data={history} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
         <defs><linearGradient id="colorExpected" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#f59e0b" stopOpacity={0.25}/><stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/></linearGradient><linearGradient id="colorActual" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#38bdf8" stopOpacity={0.3}/><stop offset="95%" stopColor="#38bdf8" stopOpacity={0}/></linearGradient></defs>

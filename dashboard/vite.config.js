@@ -20,6 +20,18 @@ export default defineConfig({
         let chartLastBucket = 0;
         let latestChartPower = null;
         let serialBuffer = '';
+        // Wokwi exposes RFC2217 (Telnet) on port 4000. Handle the Telnet
+        // framing so commands reach the simulator's serial input as plain bytes.
+        const IAC = 255;
+        const DONT = 254;
+        const DO = 253;
+        const WONT = 252;
+        const WILL = 251;
+        const SB = 250;
+        const SE = 240;
+        const COM_PORT_OPTION = 44;
+        let telnetState = 'data';
+        let telnetCommand = 0;
         const sseClients = new Set();
         const CHART_SAMPLE_INTERVAL = 30 * 1000;
         const TELEMETRY_STALE_AFTER = 3 * 60 * 1000;
@@ -97,13 +109,19 @@ export default defineConfig({
             pendingSocket = null;
             wokwiSocket = client;
             isWokwiConnected = true;
+            telnetState = 'data';
+            telnetCommand = 0;
             console.log('[Wokwi Bridge] Connected to Wokwi Simulator UART on port 4000');
+            // Negotiate the RFC2217 COM-PORT-OPTION in both directions.
+            client.write(Buffer.from([IAC, WILL, COM_PORT_OPTION, IAC, DO, COM_PORT_OPTION]));
             broadcast(telemetryStatus());
           });
 
           client.on('data', (chunk) => {
             isWokwiConnected = true;
-            serialBuffer += chunk.toString();
+            const serialChunk = decodeTelnet(chunk, client);
+            if (!serialChunk.length) return;
+            serialBuffer += serialChunk.toString('utf8');
 
             // Extract all [IOT_DATA]{...} packets reliably
             let match;
@@ -151,6 +169,44 @@ export default defineConfig({
           });
 
           client.on('timeout', () => client.destroy());
+        }
+
+        function decodeTelnet(chunk, client) {
+          const output = [];
+          for (const byte of chunk) {
+            if (telnetState === 'data') {
+              if (byte === IAC) telnetState = 'iac';
+              else output.push(byte);
+            } else if (telnetState === 'iac') {
+              if (byte === IAC) { output.push(IAC); telnetState = 'data'; }
+              else if (byte === WILL || byte === WONT || byte === DO || byte === DONT) {
+                telnetCommand = byte;
+                telnetState = 'option';
+              } else if (byte === SB) {
+                telnetState = 'subnegotiation';
+              } else telnetState = 'data';
+            } else if (telnetState === 'option') {
+              if (telnetCommand === DO) client.write(Buffer.from([IAC, byte === COM_PORT_OPTION ? WILL : WONT, byte]));
+              else if (telnetCommand === WILL) client.write(Buffer.from([IAC, byte === COM_PORT_OPTION ? DO : DONT, byte]));
+              telnetState = 'data';
+            } else if (telnetState === 'subnegotiation') {
+              if (byte === IAC) telnetState = 'subnegotiation-iac';
+            } else if (telnetState === 'subnegotiation-iac') {
+              if (byte === SE) telnetState = 'data';
+              else telnetState = 'subnegotiation';
+            }
+          }
+          return Buffer.from(output);
+        }
+
+        function encodeTelnet(serialText) {
+          const bytes = Buffer.from(serialText, 'utf8');
+          const escaped = [];
+          for (const byte of bytes) {
+            escaped.push(byte);
+            if (byte === IAC) escaped.push(IAC);
+          }
+          return Buffer.from(escaped);
         }
 
         // Check/reconnect every 1 second
@@ -244,7 +300,7 @@ export default defineConfig({
                   return;
                 }
                 if (wokwiSocket && !wokwiSocket.destroyed) {
-                  wokwiSocket.write(command + '\n');
+                  wokwiSocket.write(encodeTelnet(command + '\n'));
                   res.writeHead(200, { 'Content-Type': 'application/json' });
                   res.end(JSON.stringify({ success: true, command }));
                 } else {
