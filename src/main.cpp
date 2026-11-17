@@ -39,31 +39,40 @@ unsigned long lastSample = 0;
 // Dataset labels are fault classes, not measured dust percentages. The potentiometer
 // is explicitly a demo control mapped to those classes.
 // Member B starts here: convert the soiling control to the model's fault class.
-float faultClassForSoiling(float percent) {
-  if (percent < 12) return 0.0f;
-  if (percent < 35) return 2.1f;
-  if (percent < 55) return 2.2f;
+float faultClassForSoiling(float percent)
+{
+  if (percent < 12)
+    return 0.0f;
+  if (percent < 35)
+    return 2.1f;
+  if (percent < 55)
+    return 2.2f;
   return 2.3f;
 }
 
 // Member C starts here: tilt/servo control and operating-angle adjustment.
-float angleFactor(int degrees) {
+float angleFactor(int degrees)
+{
   const float difference = fabsf((float)degrees - OPTIMAL_ANGLE);
   return fmaxf(0.0f, cosf(difference * 0.01745329252f));
 }
 
-float temperatureFactor(float degreesC) {
+float temperatureFactor(float degreesC)
+{
   // Use a simple panel temperature derate; the dataset's temperature correlation is not causal.
   return fmaxf(0.70f, 1.0f - 0.004f * fmaxf(0.0f, degreesC - 25.0f));
 }
 
-void sampleSensors() {
+void sampleSensors()
+{
   const int lightRaw = analogRead(PIN_LDR);
   irradiance = map(4095 - lightRaw, 0, 4095, 0, 1000);
 
   const float sensorTemp = dht.readTemperature();
-  if (!isnan(sensorTemp)) {
-    if (cooledByAction && !isnan(coolingBaseline) && fabsf(sensorTemp - coolingBaseline) >= 3.0f) {
+  if (!isnan(sensorTemp))
+  {
+    if (cooledByAction && !isnan(coolingBaseline) && fabsf(sensorTemp - coolingBaseline) >= 3.0f)
+    {
       cooledByAction = false;
     }
     temperature = cooledByAction ? fminf(sensorTemp, 29.0f) : sensorTemp;
@@ -71,25 +80,32 @@ void sampleSensors() {
 
   const int potRaw = analogRead(PIN_SOILING);
   const int potPercent = map(potRaw, 0, 4095, 0, 100);
-  if (lastPotSoiling >= 0 && abs(potPercent - lastPotSoiling) >= 5) {
+  if (lastPotSoiling >= 0 && abs(potPercent - lastPotSoiling) >= 5)
+  {
     cleanedByAction = false;
   }
   lastPotSoiling = potPercent;
   soiling = cleanedByAction ? 0.0f : (float)potPercent;
 
   const int anglePotRaw = analogRead(PIN_ANGLE_POT);
-  if (anglePotAnchor < 0) {
+  if (anglePotAnchor < 0)
+  {
     anglePotAnchor = anglePotRaw;
     angle = map(anglePotRaw, 0, 4095, 0, 180);
     panelServo.write(angle);
-  } else if (manualAngleOverride) {
-    if (abs(anglePotRaw - anglePotAnchor) >= 35) {
+  }
+  else if (manualAngleOverride)
+  {
+    if (abs(anglePotRaw - anglePotAnchor) >= 35)
+    {
       manualAngleOverride = false;
       anglePotAnchor = anglePotRaw;
       angle = map(anglePotRaw, 0, 4095, 0, 180);
       panelServo.write(angle);
     }
-  } else {
+  }
+  else
+  {
     angle = map(anglePotRaw, 0, 4095, 0, 180);
     anglePotAnchor = anglePotRaw;
     panelServo.write(angle);
@@ -101,43 +117,58 @@ void sampleSensors() {
 }
 
 // Member D starts here: publish the shared telemetry contract to the bridge.
-void publishTelemetry() {
+void publishTelemetry()
+{
   ++telemetrySequence;
   Serial.printf("[IOT_DATA]{\"irradiance\":%.1f,\"temperature\":%.1f,\"soiling\":%.1f,\"angle\":%d,\"actualPower\":%.1f,\"expectedPower\":%.1f,\"actionSequence\":%d,\"telemetrySequence\":%lu,\"commandProtocol\":%d}\r\n",
                 irradiance, temperature, soiling, angle, actualPower, expectedPower, actionSequence, telemetrySequence, COMMAND_PROTOCOL_VERSION);
 }
 
-void runAction(const String& command) {
+void runAction(const String &command)
+{
   const float before = actualPower;
-  if (command == "clean") {
+  if (command == "clean")
+  {
     digitalWrite(PIN_CLEAN, HIGH);
     delay(1200);
     digitalWrite(PIN_CLEAN, LOW);
     cleanedByAction = true;
-  } else if (command == "cool") {
+  }
+  else if (command == "cool")
+  {
     digitalWrite(PIN_COOL, HIGH);
     delay(1200);
     digitalWrite(PIN_COOL, LOW);
     const float sensed = dht.readTemperature();
-    if (!isnan(sensed)) coolingBaseline = sensed;
+    if (!isnan(sensed))
+      coolingBaseline = sensed;
     cooledByAction = true;
-  } else if (command == "angle" || command.startsWith("angle:")) {
+  }
+  else if (command == "angle" || command.startsWith("angle:"))
+  {
     int requestedAngle = OPTIMAL_ANGLE;
-    if (command.startsWith("angle:")) {
+    if (command.startsWith("angle:"))
+    {
       const String value = command.substring(6);
-      if (value.length() == 0) return;
-      for (size_t i = 0; i < value.length(); ++i) {
-        if (!isDigit(value[i])) return;
+      if (value.length() == 0)
+        return;
+      for (size_t i = 0; i < value.length(); ++i)
+      {
+        if (!isDigit(value[i]))
+          return;
       }
       requestedAngle = value.toInt();
-      if (requestedAngle < 0 || requestedAngle > 180) return;
+      if (requestedAngle < 0 || requestedAngle > 180)
+        return;
     }
     angle = requestedAngle;
     manualAngleOverride = true;
     anglePotAnchor = analogRead(PIN_ANGLE_POT);
     panelServo.write(angle);
     delay(700);
-  } else {
+  }
+  else
+  {
     return;
   }
 
@@ -148,7 +179,8 @@ void runAction(const String& command) {
   publishTelemetry();
 }
 
-void setup() {
+void setup()
+{
   Serial.begin(115200);
   analogReadResolution(12);
   pinMode(PIN_COOL, OUTPUT);
@@ -160,14 +192,17 @@ void setup() {
   publishTelemetry();
 }
 
-void loop() {
-  if (Serial.available()) {
+void loop()
+{
+  if (Serial.available())
+  {
     String command = Serial.readStringUntil('\n');
     command.trim();
     runAction(command);
   }
 
-  if (millis() - lastSample >= SAMPLE_MS) {
+  if (millis() - lastSample >= SAMPLE_MS)
+  {
     lastSample = millis();
     sampleSensors();
     publishTelemetry();
