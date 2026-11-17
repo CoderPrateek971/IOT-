@@ -6,7 +6,7 @@ import MemberBDiagnosticsDashboard from './members/MemberBDiagnosticsDashboard';
 import MemberCTiltDashboard from './members/MemberCTiltDashboard';
 import MemberCCorrectiveActions from './members/MemberCCorrectiveActions';
 import MemberDHistoryDashboard from './members/MemberDHistoryDashboard';
-import { faultClassForSoiling, predictOperatingPower, PANEL_RATING_W } from './mlModel';
+import { faultClassForSoiling, predictOperatingPower } from './mlModel';
 import { ensureFirebaseUser, isFirebaseConfigured, saveActionResult, saveTelemetry, subscribeToActionHistory } from './firebase';
 
 const OPTIMAL_ANGLE = 20;
@@ -50,7 +50,6 @@ export default function App() {
   const [temperature, setTemperature] = useState(0); // °C
   const [soiling, setSoiling] = useState(0); // simulated %
   const [angle, setAngle] = useState(35); // degrees
-  const [angleDraft, setAngleDraft] = useState(null);
 
   // --- Power States ---
   const [expectedPower, setExpectedPower] = useState(0);
@@ -212,7 +211,6 @@ export default function App() {
   const underperformanceThreshold = Math.max(8, expectedPower * 0.1);
   const isUnderperforming = isDeviceConnected && expectedPower > 0 && powerLoss > underperformanceThreshold;
   const performanceRatio = expectedPower > 0 ? Math.round((actualPower / expectedPower) * 100) : 0;
-  const angleTarget = angleDraft == null ? angle : angleDraft;
 
   // Member 2 maps soiling/fault state; Members 3 and 4 contribute action and temperature conditions.
   const culprits = useMemo(() => {
@@ -285,44 +283,6 @@ export default function App() {
     setIsSolving(false);
   };
 
-  // Member 3: send the angle command and require confirmation from fresh telemetry.
-  const applyManualAngle = async () => {
-    const target = Math.min(180, Math.max(0, Math.round(Number(angleTarget))));
-    setIsApplying(true);
-    setActionSuccessMessage(null);
-    const commandStartedAt = Date.now();
-    try {
-      const response = await fetch('/api/command', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ command: `angle:${target}` })
-      });
-      const result = await response.json();
-      if (!response.ok || !result.success) throw new Error(result.error || 'Wokwi is not connected');
-
-      let confirmed = false;
-      for (let attempt = 0; attempt < 20; attempt++) {
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-        const telemetryResponse = await fetch('/api/telemetry', { cache: 'no-store' });
-        if (!telemetryResponse.ok) continue;
-        const payload = await telemetryResponse.json();
-        const reportedAngle = Number(payload.telemetry?.angle);
-        if (payload.connected && Number(payload.readingAt) > commandStartedAt && Number.isFinite(reportedAngle) && Math.abs(reportedAngle - target) <= 1) {
-          receiveTelemetry(payload.telemetry);
-          confirmed = true;
-          break;
-        }
-      }
-      if (!confirmed) throw new Error('Wokwi did not confirm the requested servo angle within 20 seconds.');
-      setAngleDraft(null);
-      setActionSuccessMessage({ message: `Servo angle set to ${target}°.` });
-    } catch (error) {
-      setActionSuccessMessage({ failure: error.message });
-    } finally {
-      setIsApplying(false);
-    }
-  };
-
   // Member 3: verify corrective actions and pass completed results to Member 3 Firebase persistence.
   const applyCorrectiveAction = async (action) => {
     setIsApplying(true);
@@ -363,7 +323,13 @@ export default function App() {
           }
         }
       }
-      if (after === null) throw new Error('No post-action measurement confirmed the change within 20 seconds. Check that the Wokwi simulation is running the latest firmware and that the actuator state changed.');
+      if (after === null) {
+        setActionSuccessMessage({
+          pending: true,
+          message: `${action.name} command was accepted by the Wokwi bridge. Fresh telemetry has not confirmed the result yet, so no measured recovery was recorded.`
+        });
+        return;
+      }
 
       const actualGain = Number((after - before).toFixed(1));
       const error = Number(Math.abs(action.recovery - actualGain).toFixed(1));
@@ -429,9 +395,9 @@ export default function App() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
         {/* Notification Toast */}
         {actionSuccessMessage && (
-          <div className={`p-3.5 rounded-lg border flex items-center justify-between gap-3 text-sm ${actionSuccessMessage.failure ? 'bg-rose-950/40 border-rose-500/30' : 'bg-emerald-950/40 border-emerald-500/30'}`}>
+          <div className={`p-3.5 rounded-lg border flex items-center justify-between gap-3 text-sm ${actionSuccessMessage.failure ? 'bg-rose-950/40 border-rose-500/30' : actionSuccessMessage.pending ? 'bg-amber-950/40 border-amber-500/30' : 'bg-emerald-950/40 border-emerald-500/30'}`}>
             <div className="flex items-center gap-2.5">
-              <CheckCircle2 className={`w-4 h-4 flex-shrink-0 ${actionSuccessMessage.failure ? 'text-rose-400' : 'text-emerald-400'}`} />
+              <CheckCircle2 className={`w-4 h-4 flex-shrink-0 ${actionSuccessMessage.failure ? 'text-rose-400' : actionSuccessMessage.pending ? 'text-amber-300' : 'text-emerald-400'}`} />
               {actionSuccessMessage.failure ? <span className="text-rose-200">{actionSuccessMessage.failure}</span> : actionSuccessMessage.message ? (
                 <span className="text-slate-200">{actionSuccessMessage.message}</span>
               ) : (
@@ -453,7 +419,7 @@ export default function App() {
           </div>
         )}
 
-        {/* Member 2: model predictions and soiling/fault diagnostics. */}
+        {/* Member 2: model predictions and performance diagnostics. */}
         <MemberBDiagnosticsDashboard
           isUnderperforming={isUnderperforming}
           powerLoss={powerLoss}
@@ -463,7 +429,6 @@ export default function App() {
           culprits={culprits}
           onEvaluate={handleSolveThis}
           actionHistory={actionHistory}
-          soiling={soiling}
         />
 
         {/* Member 1: irradiance-linked power, performance ratio, and session energy. */}
@@ -471,7 +436,6 @@ export default function App() {
           actualPower={actualPower}
           expectedPower={expectedPower}
           sessionEnergy={sessionEnergy}
-          panelRating={PANEL_RATING_W}
           performanceRatio={performanceRatio}
           isUnderperforming={isUnderperforming}
           lastUpdated={lastUpdated}
@@ -480,18 +444,13 @@ export default function App() {
         />
 
         {/* Member 1: irradiance; Member 4: temperature and live history; Member 3: tilt control. */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="space-y-4">
-            <MemberASensorDashboard irradiance={irradiance} temperature={temperature} />
+        <div className="grid grid-cols-1 items-stretch lg:grid-cols-3 gap-6">
+          <div className="space-y-4 lg:flex lg:h-full lg:flex-col">
+            <MemberASensorDashboard irradiance={irradiance} temperature={temperature} soiling={soiling} />
             <MemberCTiltDashboard
               angle={angle}
-              angleTarget={angleTarget}
               optimalAngle={OPTIMAL_ANGLE}
-              onAngleDraft={setAngleDraft}
-              onApplyAngle={applyManualAngle}
-              isApplying={isApplying}
             />
-            <p className="text-[11px] text-slate-500">The soiling potentiometer maps to Kaggle fault classes; it is not a dust sensor. Moving the tilt potentiometer returns control from the dashboard angle setting.</p>
           </div>
           <div className="lg:col-span-2">
             <MemberDHistoryDashboard
