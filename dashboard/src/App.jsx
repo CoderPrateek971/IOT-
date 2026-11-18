@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Sun, CheckCircle2 } from 'lucide-react';
+import { Sun, Moon, CheckCircle2 } from 'lucide-react';
 import MemberAPowerDashboard from './members/MemberAPowerDashboard';
 import MemberASensorDashboard from './members/MemberASensorDashboard';
 import MemberBDiagnosticsDashboard from './members/MemberBDiagnosticsDashboard';
@@ -35,8 +35,14 @@ function describeFirebaseError(error) {
 }
 
 export default function App() {
+  const [theme, setTheme] = useState(() => localStorage.getItem('solarDashboardTheme') === 'light' ? 'light' : 'dark');
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem('solarDashboardTheme', theme);
+  }, [theme]);
+
   // Shared dashboard coordinator: member-owned readings, power, model, controls, history, and Firebase.
-  // Member 4 owns Wokwi live/stale device status; Member 3 owns Firebase status and persistence.
+  // Wokwi live/stale device status, Firebase status, and persistence.
   // --- Connection State ---
   const [isDeviceConnected, setIsDeviceConnected] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(null);
@@ -45,7 +51,7 @@ export default function App() {
   const lastFirebaseTelemetry = React.useRef(0);
 
   // --- Live Sensor States (Maintains previous values; updates when new telemetry arrives) ---
-  // Member 1 owns photoresistor/irradiance; Member 4 owns DHT22 temperature; Member 2 owns soiling; Member 3 owns tilt.
+  // Sensor state: photoresistor/irradiance, DHT22 temperature, soiling, and tilt.
   const [irradiance, setIrradiance] = useState(0); // W/m²
   const [temperature, setTemperature] = useState(0); // °C
   const [soiling, setSoiling] = useState(0); // simulated %
@@ -72,7 +78,7 @@ export default function App() {
     try { return JSON.parse(localStorage.getItem('solarActionHistory') || '[]'); } catch { return []; }
   });
 
-  // Member 4: receive the live telemetry stream and retained history from the local Wokwi bridge.
+  // Receive the live telemetry stream and retained history from the local Wokwi bridge.
   useEffect(() => {
     let eventSource = null;
 
@@ -96,7 +102,7 @@ export default function App() {
     };
   }, []);
 
-  // Member 4: REST polling supplements SSE and refreshes the bridge connection and chart history.
+  // REST polling supplements SSE and refreshes the bridge connection and chart history.
   useEffect(() => {
     let active = true;
     const refreshTelemetry = async () => {
@@ -149,7 +155,7 @@ export default function App() {
     return () => clearInterval(timer);
   }, [lastUpdated]);
 
-  // Member 3 owns Firebase authentication and action-history subscription.
+  // Firebase authentication and action-history subscription.
   useEffect(() => {
     if (!isFirebaseConfigured) return undefined;
     let active = true;
@@ -178,7 +184,7 @@ export default function App() {
     const signature = JSON.stringify(t);
     if (signature === lastTelemetrySignature.current) return;
     lastTelemetrySignature.current = signature;
-    // Member 1: irradiance; Member 4: DHT22 temperature; Member 2: soiling; Member 3: tilt.
+    // Update irradiance, DHT22 temperature, soiling, and tilt from telemetry.
     if (t.irradiance != null) setIrradiance(Number(t.irradiance));
     if (t.temperature != null) setTemperature(Number(t.temperature));
     if (t.soiling != null) setSoiling(Number(t.soiling));
@@ -190,14 +196,14 @@ export default function App() {
     if (Number.isFinite(expected)) setExpectedPower(expected);
     if (t.actionSequence != null) setActionSequence(Number(t.actionSequence));
     const now = Date.now();
-    // Member 3 owns Firebase persistence; telemetry fields are supplied by the sensor/model owners.
+    // Persist telemetry in Firebase; fields are supplied by the sensors and model.
     if (firebaseUid.current && now - lastFirebaseTelemetry.current >= 60000) {
       lastFirebaseTelemetry.current = now;
       saveTelemetry(firebaseUid.current, t)
         .then(() => setFirebaseStatus('Connected'))
         .catch((error) => setFirebaseStatus(`Write error: ${describeFirebaseError(error)}`));
     }
-    // Member 1: integrate consecutive valid power readings into session energy.
+    // Integrate consecutive valid power readings into session energy.
     const previous = lastEnergySample.current;
     if (hasValidPower && previous && now > previous.time && now - previous.time <= 30000) {
       setSessionEnergy((energy) => energy + ((previous.power + actual) / 2) * (now - previous.time) / 3600000000);
@@ -212,7 +218,7 @@ export default function App() {
   const isUnderperforming = isDeviceConnected && expectedPower > 0 && powerLoss > underperformanceThreshold;
   const performanceRatio = expectedPower > 0 ? Math.round((actualPower / expectedPower) * 100) : 0;
 
-  // Member 2 maps soiling/fault state; Members 3 and 4 contribute action and temperature conditions.
+  // Combine soiling/fault state with action and temperature conditions.
   const culprits = useMemo(() => {
     const list = [];
     if (soiling > 25) {
@@ -262,7 +268,7 @@ export default function App() {
       (_, index) => chartStart + index * CHART_SAMPLE_INTERVAL_MS
     );
 
-  // Member 2 provides model predictions; Member 3 ranks and applies corrective actions.
+  // Calculate model predictions, rank corrective actions, and apply the selected action.
   const handleSolveThis = () => {
     setIsSolving(true);
     setShowSolveModal(true);
@@ -283,7 +289,7 @@ export default function App() {
     setIsSolving(false);
   };
 
-  // Member 3: verify corrective actions and pass completed results to Member 3 Firebase persistence.
+  // Verify corrective actions and persist completed results in Firebase.
   const applyCorrectiveAction = async (action) => {
     setIsApplying(true);
     setActionSuccessMessage(null);
@@ -375,7 +381,17 @@ export default function App() {
             </div>
           </div>
 
-          <div className="flex items-center gap-4 text-xs">
+          <div className="flex items-center gap-3 text-xs">
+            <button
+              type="button"
+              onClick={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')}
+              className="inline-flex items-center gap-2 rounded border border-slate-700/60 bg-slate-800/80 px-3 py-1.5 text-slate-200 transition hover:bg-slate-700/70"
+              aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}
+              title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}
+            >
+              {theme === 'dark' ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
+              <span>{theme === 'dark' ? 'Light theme' : 'Dark theme'}</span>
+            </button>
             <div className="flex items-center gap-2 px-3 py-1.5 rounded bg-slate-800/80 border border-slate-700/60">
               <span className={`w-2 h-2 rounded-full ${isDeviceConnected ? 'bg-emerald-400' : 'bg-slate-400'}`} />
               <span className="text-slate-200 font-medium">
@@ -419,7 +435,7 @@ export default function App() {
           </div>
         )}
 
-        {/* Member 2: model predictions and performance diagnostics. */}
+        {/* Model predictions and performance diagnostics. */}
         <MemberBDiagnosticsDashboard
           isUnderperforming={isUnderperforming}
           powerLoss={powerLoss}
@@ -431,7 +447,7 @@ export default function App() {
           actionHistory={actionHistory}
         />
 
-        {/* Member 1: irradiance-linked power, performance ratio, and session energy. */}
+        {/* Irradiance-linked power, performance ratio, and session energy. */}
         <MemberAPowerDashboard
           actualPower={actualPower}
           expectedPower={expectedPower}
@@ -443,7 +459,7 @@ export default function App() {
           powerLoss={powerLoss}
         />
 
-        {/* Member 1: irradiance; Member 4: temperature and live history; Member 3: tilt control. */}
+        {/* Environmental sensors, tilt control, and live power history. */}
         <div className="grid grid-cols-1 items-stretch lg:grid-cols-3 gap-6">
           <div className="space-y-4 lg:flex lg:h-full lg:flex-col">
             <MemberASensorDashboard irradiance={irradiance} temperature={temperature} soiling={soiling} />
@@ -458,13 +474,14 @@ export default function App() {
               chartStart={chartStart}
               chartDomainEnd={chartDomainEnd}
               chartTicks={chartTicks}
+              isLightTheme={theme === 'light'}
             />
           </div>
         </div>
 
       </main>
 
-      {/* Member 3: corrective-action ranking, commands, and verification. */}
+      {/* Corrective-action ranking, commands, and verification. */}
       <MemberCCorrectiveActions
         isOpen={showSolveModal}
         onClose={() => setShowSolveModal(false)}
