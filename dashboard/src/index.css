@@ -8,3 +8,39 @@ body {
   background-color: #020617;
   color: #f8fafc;
 }
+
+html[data-theme='light'] body {
+  background-color: #f1f5f9;
+  color: #0f172a;
+}
+
+/* Light theme translations for the dashboard's existing Tailwind palette. */
+html[data-theme='light'] .bg-slate-950 { background-color: #f1f5f9 !important; }
+html[data-theme='light'] .bg-slate-900 { background-color: #ffffff !important; }
+html[data-theme='light'] .bg-slate-900\/80 { background-color: rgb(255 255 255 / 0.94) !important; }
+html[data-theme='light'] .bg-slate-800 { background-color: #e8eef5 !important; }
+html[data-theme='light'] .bg-slate-800\/80 { background-color: rgb(232 238 245 / 0.9) !important; }
+html[data-theme='light'] .bg-slate-800\/40,
+html[data-theme='light'] .hover\:bg-slate-800\/40:hover { background-color: #f1f5f9 !important; }
+html[data-theme='light'] .hover\:bg-slate-700\/70:hover { background-color: #dbe5ef !important; }
+html[data-theme='light'] .text-white { color: #0f172a !important; }
+html[data-theme='light'] .text-slate-100 { color: #1e293b !important; }
+html[data-theme='light'] .text-slate-200 { color: #334155 !important; }
+html[data-theme='light'] .text-slate-300 { color: #475569 !important; }
+html[data-theme='light'] .text-slate-400 { color: #64748b !important; }
+html[data-theme='light'] .text-slate-500 { color: #64748b !important; }
+html[data-theme='light'] .border-slate-800 { border-color: #d9e2ec !important; }
+html[data-theme='light'] .border-slate-700\/60 { border-color: #cbd5e1 !important; }
+html[data-theme='light'] .divide-slate-800 > :not([hidden]) ~ :not([hidden]) { border-color: #d9e2ec !important; }
+html[data-theme='light'] .bg-rose-950\/40 { background-color: #fff1f2 !important; }
+html[data-theme='light'] .bg-rose-950\/30 { background-color: #fff1f2 !important; }
+html[data-theme='light'] .bg-amber-950\/40 { background-color: #fffbeb !important; }
+html[data-theme='light'] .bg-emerald-950\/40 { background-color: #ecfdf5 !important; }
+html[data-theme='light'] .bg-emerald-950\/30 { background-color: #ecfdf5 !important; }
+html[data-theme='light'] .bg-emerald-950\/15 { background-color: #f0fdf4 !important; }
+html[data-theme='light'] .text-rose-200 { color: #9f1239 !important; }
+html[data-theme='light'] .text-amber-300 { color: #92400e !important; }
+html[data-theme='light'] .text-emerald-300 { color: #047857 !important; }
+html[data-theme='light'] button.bg-emerald-600,
+html[data-theme='light'] button.bg-blue-600,
+html[data-theme='light'] button.bg-sky-600 { color: #ffffff !important; }

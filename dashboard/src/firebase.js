@@ -1,4 +1,4 @@
-// Member 3 owns Firebase configuration, authentication, reads, writes, and subscriptions.
+// Firebase configuration, authentication, reads, writes, and subscriptions.
 // Other members define their telemetry/action fields and coordinate the shared data schema here.
 import { getApp, getApps, initializeApp } from 'firebase/app';
 import { getAuth, onAuthStateChanged, signInAnonymously } from 'firebase/auth';

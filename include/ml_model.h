@@ -7,12 +7,15 @@ constexpr float ML_PANEL_RATING_W = 150.0f;
 constexpr float ML_INTERCEPT = -0.02382451298f;
 constexpr float ML_FAULT_CLASSES[] = {0.0f, 1.0f, 2.1f, 2.2f, 2.3f, 3.1f, 3.2f, 4.0f};
 constexpr float ML_COEFFICIENTS[] = {0.5849041247f, 0.05004964212f, 0.1419228562f, -0.3216860946f, 0.08623906431f, -0.04882345634f, -0.09582957323f, 0.07684126856f, 0.1347426794f, 0.02659325378f};
-inline float predictPowerML(float irradiance, float temperature, float faultClass) {
+inline float predictPowerML(float irradiance, float temperature, float faultClass)
+{
   float x[10] = {irradiance / 1000.0f, (temperature - 25.0f) / 25.0f,
-    0, 0, 0, 0, 0, 0, 0, 0};
-  for (int i = 0; i < 8; ++i) x[i + 2] = (faultClass == ML_FAULT_CLASSES[i]) ? 1.0f : 0.0f;
+                 0, 0, 0, 0, 0, 0, 0, 0};
+  for (int i = 0; i < 8; ++i)
+    x[i + 2] = (faultClass == ML_FAULT_CLASSES[i]) ? 1.0f : 0.0f;
   float normalized = ML_INTERCEPT;
-  for (int i = 0; i < 10; ++i) normalized += ML_COEFFICIENTS[i] * x[i];
+  for (int i = 0; i < 10; ++i)
+    normalized += ML_COEFFICIENTS[i] * x[i];
   normalized = fmaxf(0.0f, fminf(1.15f, normalized));
   return normalized * ML_PANEL_RATING_W;
 }

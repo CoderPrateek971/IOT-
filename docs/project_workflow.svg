@@ -1,0 +1,113 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="2040" viewBox="0 0 1400 2040" role="img" aria-labelledby="title desc">
+<title id="title">Solar panel monitoring and predictive corrective control workflow</title>
+<desc id="desc">Current project workflow from simulated sensors through ESP32, local Wokwi serial bridge, dashboard estimates and simulated corrective actions, with optional Firebase storage.</desc>
+<defs>
+  <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto"><path d="M1,1 L11,6 L1,11 z" fill="#475569"/></marker>
+  <style>
+    .title{font:700 34px Arial,sans-serif;fill:#0f172a}.subtitle{font:18px Arial,sans-serif;fill:#475569}
+    .h{font:700 22px Arial,sans-serif;fill:#102033}.t{font:17px Arial,sans-serif;fill:#334155}.small{font:15px Arial,sans-serif;fill:#475569}
+    .box{stroke-width:2;rx:15}.arrow{fill:none;stroke:#475569;stroke-width:3;marker-end:url(#arrow)}
+    .sensor{fill:#e8f5e9;stroke:#4d8d58}.device{fill:#e8f0ff;stroke:#5279c7}.bridge{fill:#f0eaff;stroke:#8064bb}
+    .model{fill:#fff4d6;stroke:#c58a16}.dashboard{fill:#e6f5fb;stroke:#3193b4}.action{fill:#fce8ef;stroke:#c45a7b}
+    .neutral{fill:#f1f5f9;stroke:#64748b}.optional{fill:#f5f3ff;stroke:#8b78c4;stroke-dasharray:8 6}
+    .decision{fill:#eff6ff;stroke:#5279c7;stroke-width:2}
+  </style>
+</defs>
+<rect width="1400" height="2040" fill="#ffffff"/>
+<text x="700" y="58" text-anchor="middle" class="title">Solar Panel Monitoring and Predictive Corrective Control</text>
+<text x="700" y="91" text-anchor="middle" class="subtitle">Implemented workflow in the ESP32 + Wokwi + React dashboard project</text>
+
+<!-- acquisition -->
+<rect x="320" y="125" width="760" height="118" class="box sensor"/>
+<text x="700" y="162" text-anchor="middle" class="h">Simulated sensor and control inputs</text>
+<text x="700" y="192" text-anchor="middle" class="t">Photoresistor → irradiance · DHT22 → temperature · potentiometers → soiling and tilt</text>
+<text x="700" y="219" text-anchor="middle" class="small">Read and refreshed about every 2 seconds in Wokwi</text>
+<path d="M700 243 V278" class="arrow"/>
+
+<rect x="320" y="282" width="760" height="128" class="box device"/>
+<text x="700" y="321" text-anchor="middle" class="h">ESP32 firmware</text>
+<text x="700" y="351" text-anchor="middle" class="t">Scales sensor values, maps soiling to a fault class, controls servo and indicator LEDs</text>
+<text x="700" y="380" text-anchor="middle" class="small">Calculates modeled operating power and clean-reference expected power</text>
+
+<!-- model side note -->
+<rect x="45" y="292" width="230" height="190" class="box model"/>
+<text x="160" y="328" text-anchor="middle" class="h">Offline model training</text>
+<text x="160" y="360" text-anchor="middle" class="small">Kaggle weather + inverter</text>
+<text x="160" y="384" text-anchor="middle" class="small">records → Ridge regression</text>
+<text x="160" y="416" text-anchor="middle" class="small">Shared coefficients exported</text>
+<text x="160" y="440" text-anchor="middle" class="small">to ESP32 and browser code</text>
+<path d="M275 385 H300 V350 H320" class="arrow"/>
+<text x="46" y="506" class="small">Model predicts power; it does not classify faults.</text>
+
+<path d="M700 410 V450" class="arrow"/>
+<rect x="320" y="454" width="760" height="108" class="box bridge"/>
+<text x="700" y="492" text-anchor="middle" class="h">Local Wokwi serial bridge</text>
+<text x="700" y="522" text-anchor="middle" class="t">Wokwi RFC2217 serial → Vite bridge → local dashboard API and event stream</text>
+<text x="700" y="546" text-anchor="middle" class="small">No MQTT or cloud transport is used for the live telemetry path</text>
+<path d="M700 562 V602" class="arrow"/>
+
+<rect x="320" y="606" width="760" height="126" class="box dashboard"/>
+<text x="700" y="645" text-anchor="middle" class="h">React dashboard</text>
+<text x="700" y="675" text-anchor="middle" class="t">Shows environmental readings, soiling %, tilt angle, power estimates, status, chart and action history</text>
+<text x="700" y="704" text-anchor="middle" class="small">Connection status follows telemetry freshness; Firebase status is separate</text>
+<path d="M700 732 V773" class="arrow"/>
+
+<rect x="260" y="777" width="880" height="142" class="box model"/>
+<text x="700" y="816" text-anchor="middle" class="h">Compare expected power with modeled operating power</text>
+<text x="700" y="848" text-anchor="middle" class="t">Expected = clean fault class at current irradiance · Operating = current fault class with temperature and tilt adjustments</text>
+<text x="700" y="878" text-anchor="middle" class="small">Underperforming only when telemetry is fresh and deficit exceeds max(8 W, 10% of expected power)</text>
+<path d="M700 919 V954" class="arrow"/>
+
+<polygon points="700,954 850,1035 700,1116 550,1035" class="decision"/>
+<text x="700" y="1028" text-anchor="middle" class="h">Underperforming?</text>
+<text x="700" y="1058" text-anchor="middle" class="small">Based on modeled estimates</text>
+
+<!-- normal branch -->
+<path d="M550 1035 H260 V1160" class="arrow"/>
+<text x="380" y="1023" class="small">No</text>
+<rect x="90" y="1164" width="340" height="104" class="box sensor"/>
+<text x="260" y="1205" text-anchor="middle" class="h">Nominal status</text>
+<text x="260" y="1235" text-anchor="middle" class="t">Continue displaying incoming telemetry</text>
+
+<!-- yes branch -->
+<path d="M850 1035 H1120 V1160" class="arrow"/>
+<text x="1000" y="1023" class="small">Yes</text>
+<rect x="900" y="1164" width="440" height="104" class="box bridge"/>
+<text x="1120" y="1205" text-anchor="middle" class="h">Evaluate candidate actions</text>
+<text x="1120" y="1235" text-anchor="middle" class="t">Estimate recovery and subtract illustrative Wh costs</text>
+<path d="M1120 1268 V1300" class="arrow"/>
+
+<rect x="810" y="1304" width="620" height="168" class="box action"/>
+<text x="1120" y="1340" text-anchor="middle" class="h">Simulated corrective actions</text>
+<text x="850" y="1380" class="t">• Tilt: command servo toward 20°</text>
+<text x="850" y="1413" class="t">• Cleaning: pulse LED and set simulated soiling to 0%</text>
+<text x="850" y="1446" class="t">• Cooling: pulse LED and apply a 29°C software temperature cap</text>
+<path d="M1120 1472 V1502" class="arrow"/>
+
+<rect x="810" y="1506" width="620" height="110" class="box device"/>
+<text x="1120" y="1548" text-anchor="middle" class="h">User applies a recommended action</text>
+<text x="1120" y="1578" text-anchor="middle" class="t">Dashboard → local Vite bridge → serial command → ESP32/Wokwi</text>
+<path d="M1120 1616 V1646" class="arrow"/>
+
+<rect x="810" y="1650" width="620" height="125" class="box dashboard"/>
+<text x="1120" y="1692" text-anchor="middle" class="h">Fresh telemetry verifies simulated state</text>
+<text x="1120" y="1722" text-anchor="middle" class="t">Dashboard compares predicted recovery with simulated before/after power change</text>
+<text x="1120" y="1750" text-anchor="middle" class="small">Records action, timestamp and absolute error; no overall recovery percentage</text>
+<path d="M1120 1775 V1806" class="arrow"/>
+
+<rect x="810" y="1810" width="620" height="100" class="box optional"/>
+<text x="1120" y="1850" text-anchor="middle" class="h">Optional Firebase storage</text>
+<text x="1120" y="1880" text-anchor="middle" class="t">After anonymous sign-in/configuration: save telemetry and completed action results</text>
+
+<rect x="45" y="1320" width="690" height="355" class="box neutral"/>
+<text x="390" y="1364" text-anchor="middle" class="h">How to interpret the results</text>
+<text x="82" y="1410" class="t">• Power values and candidate recovery are model estimates.</text>
+<text x="82" y="1452" class="t">• Post-action changes are simulated telemetry, not meter readings.</text>
+<text x="82" y="1494" class="t">• The project has no physical PV panel or voltage/current power meter.</text>
+<text x="82" y="1536" class="t">• The dataset has no measured dust percentage or tilt angle.</text>
+<text x="82" y="1578" class="t">• Soiling bands, 20° target and correction rules are demo assumptions.</text>
+<text x="82" y="1628" class="small">The workflow demonstrates IoT acquisition, local telemetry, model-based</text>
+<text x="82" y="1652" class="small">decision support, simulated control, and confirmation through new readings.</text>
+
+<text x="700" y="1988" text-anchor="middle" class="small">Simulation and educational prototype · No physical energy recovery is claimed</text>
+</svg>
